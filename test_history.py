@@ -1,7 +1,15 @@
 """Tests für die lokale Historie - laufen offline mit einer In-Memory-SQLite-DB."""
 import pytest
 
-from history import Snapshot, connect, creator_history, previous_snapshot, record_snapshot
+from history import (
+    Snapshot,
+    connect,
+    creator_history,
+    has_been_alerted,
+    mark_alerted,
+    previous_snapshot,
+    record_snapshot,
+)
 
 
 @pytest.fixture
@@ -65,3 +73,23 @@ def test_snapshots_for_different_addresses_are_independent(conn):
     record_snapshot(conn, _snapshot(address="a2", liquidity_usd=2_000.0))
     assert previous_snapshot(conn, "a1").liquidity_usd == 1_000.0
     assert previous_snapshot(conn, "a2").liquidity_usd == 2_000.0
+
+
+def test_has_been_alerted_is_false_for_unknown_address(conn):
+    assert has_been_alerted(conn, "unknown") is False
+
+
+def test_mark_alerted_then_has_been_alerted_is_true(conn):
+    mark_alerted(conn, "addr1")
+    assert has_been_alerted(conn, "addr1") is True
+
+
+def test_mark_alerted_is_idempotent(conn):
+    mark_alerted(conn, "addr1")
+    mark_alerted(conn, "addr1")  # darf nicht crashen (PRIMARY KEY)
+    assert has_been_alerted(conn, "addr1") is True
+
+
+def test_other_addresses_remain_unaffected_by_mark_alerted(conn):
+    mark_alerted(conn, "addr1")
+    assert has_been_alerted(conn, "addr2") is False

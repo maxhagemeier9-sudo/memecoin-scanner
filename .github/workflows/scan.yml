@@ -1,0 +1,46 @@
+name: Coin Risk Scan
+
+on:
+  schedule:
+    # GitHub garantiert Minimum 5 Min, effektiv bei hoher Last auch spaeter
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: coin-risk-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore history DB from previous run
+        uses: actions/cache/restore@v4
+        with:
+          path: history.sqlite3
+          key: history-db-${{ github.run_id }}
+          restore-keys: |
+            history-db-
+
+      - name: Run scan
+        env:
+          BIRDEYE_API_KEY: ${{ secrets.BIRDEYE_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python ci_scan.py
+
+      - name: Save history DB for next run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: history.sqlite3
+          key: history-db-${{ github.run_id }}

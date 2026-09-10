@@ -7,11 +7,17 @@ und ist Grundlage für zwei Signale in risk.py:
 
 Jeder Scan fügt eine neue Zeile hinzu (kein Überschreiben), damit die
 Historie über die Zeit wächst statt nur den letzten Stand zu kennen.
+
+Die `alerts`-Tabelle hält zusätzlich fest, welche Adressen schon einmal
+alarmiert wurden - persistent statt nur im Prozessspeicher, damit ein
+Coin nicht erneut gemeldet wird, wenn der Scan (wie bei GitHub Actions)
+bei jedem Trigger in einem komplett neuen Prozess läuft.
 """
 from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from config import HISTORY_DB_PATH
 
@@ -31,6 +37,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_address ON snapshots(address);
 CREATE INDEX IF NOT EXISTS idx_snapshots_creator ON snapshots(creator_authority);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    address TEXT PRIMARY KEY,
+    alerted_at TEXT NOT NULL
+);
 """
 
 
@@ -87,6 +98,19 @@ def previous_snapshot(conn: sqlite3.Connection, address: str) -> Snapshot | None
         (address,),
     ).fetchone()
     return Snapshot(*row) if row else None
+
+
+def has_been_alerted(conn: sqlite3.Connection, address: str) -> bool:
+    row = conn.execute("SELECT 1 FROM alerts WHERE address = ?", (address,)).fetchone()
+    return row is not None
+
+
+def mark_alerted(conn: sqlite3.Connection, address: str) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO alerts (address, alerted_at) VALUES (?, ?)",
+        (address, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
 
 
 def creator_history(conn: sqlite3.Connection, creator_authority: str) -> list[Snapshot]:
