@@ -92,3 +92,34 @@ def test_get_holders_returns_data_payload(mock_get):
     result = _client().get_holders("addr")
     assert result["holder"] == 1000
     assert result["top10_hold_percent"] == 42.5
+
+
+@patch("birdeye_client.requests.Session.get")
+def test_get_ohlcv_returns_items_list(mock_get):
+    mock_get.return_value = _response(200, {
+        "data": {"items": [{"o": 1.0, "h": 2.0, "l": 0.5, "c": 1.5, "unix_time": 1700000000}]},
+    })
+    result = _client().get_ohlcv("addr", type_="1H", time_from=1700000000, time_to=1700100000)
+    assert result == [{"o": 1.0, "h": 2.0, "l": 0.5, "c": 1.5, "unix_time": 1700000000}]
+
+    params = mock_get.call_args[1]["params"]
+    assert params["time_from"] == 1700000000
+    assert params["time_to"] == 1700100000
+
+
+@patch("birdeye_client.requests.Session.get")
+def test_get_ohlcv_omits_time_params_when_not_given(mock_get):
+    mock_get.return_value = _response(200, {"data": {"items": []}})
+    _client().get_ohlcv("addr")
+    params = mock_get.call_args[1]["params"]
+    assert "time_from" not in params
+    assert "time_to" not in params
+
+
+@patch("birdeye_client.requests.Session.get")
+def test_get_top_traders_returns_items_list(mock_get):
+    mock_get.return_value = _response(200, {
+        "data": {"items": [{"owner": "wallet1", "volume": 500.0}]},
+    })
+    result = _client().get_top_traders("addr")
+    assert result == [{"owner": "wallet1", "volume": 500.0}]

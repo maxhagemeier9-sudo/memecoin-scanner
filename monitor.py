@@ -4,7 +4,10 @@ mehrfach zu melden. Beenden mit Strg+C.
 
 Nutzt dieselbe Historie-DB wie risk_scan.py, dadurch profitieren auch die
 Trend-/Creator-Signale (evaluate_liquidity_trend, evaluate_creator_history)
-vom wiederholten Scannen über die Zeit.
+vom wiederholten Scannen über die Zeit. Jeder Alert (regulär oder Rising
+Coin) eröffnet zusätzlich eine simulierte Paper-Trading-Position (siehe
+paper_trading.py) - so lässt sich messen, ob unsere Signale tatsächlich
+profitabel gewesen wären, bevor echtes Geld involviert ist.
 """
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ import time
 from datetime import datetime, timezone
 
 import history
+import paper_trading
 from alerts import alert
 from birdeye_client import BirdeyeAPIError, BirdeyeClient
 from config import MONITOR_ALERT_SCORE_THRESHOLD, MONITOR_INTERVAL_SECONDS
@@ -27,6 +31,24 @@ from risk_scan import (
     scan_new_coins,
 )
 from telegram_alerts import TelegramError, send_telegram_message
+
+
+def _maybe_open_paper_trade(conn: sqlite3.Connection, assessment: TokenAssessment) -> None:
+    """Eröffnet eine simulierte Position, wenn ein Preis vorliegt und noch
+    keine offene Position für diese Adresse existiert (siehe paper_trading.py)."""
+    address = assessment.report.address
+    if assessment.price is None or assessment.price <= 0:
+        return
+    if paper_trading.has_open_trade(conn, address):
+        return
+    paper_trading.open_trade(
+        conn,
+        address=address,
+        symbol=assessment.report.symbol,
+        entry_price=assessment.price,
+        entry_score=assessment.score.total,
+        entry_risk_level=assessment.report.overall.name,
+    )
 
 
 def _should_alert(assessment: TokenAssessment) -> bool:
@@ -52,6 +74,8 @@ def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
     mehrere unabhängige Prozess-Starts hinweg funktioniert (z.B. ein frischer
     Prozess pro GitHub-Actions-Trigger statt eines Dauerlaufs).
     """
+    paper_trading.ensure_schema(conn)
+
     results = scan_new_coins(client, conn=conn)
     _print_ranking(results)
 
@@ -70,6 +94,7 @@ def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
                 f"Risiko {assessment.report.overall.name} ({address})"
             )
             history.mark_alerted(conn, address)
+            _maybe_open_paper_trade(conn, assessment)
 
     for first, assessment in recheck_watchlist(client, conn):
         address = assessment.report.address
@@ -83,6 +108,14 @@ def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
                 f"Risiko {assessment.report.overall.name} ({address})"
             )
             history.mark_rising_alerted(conn, address)
+            _maybe_open_paper_trade(conn, assessment)
+
+    for trade, reason, exit_price in paper_trading.process_open_trades(client, conn):
+        pnl_percent = (exit_price - trade.entry_price) / trade.entry_price * 100
+        alert(
+            f"📝 Paper-Trade geschlossen: {trade.symbol} - {reason}, {pnl_percent:+.0f}% "
+            f"(Einstieg ${trade.entry_price:.8f} -> Ausstieg ${exit_price:.8f}) ({trade.address})"
+        )
 
 
 def run_monitor(client: BirdeyeClient, conn: sqlite3.Connection) -> None:

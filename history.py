@@ -53,6 +53,15 @@ CREATE TABLE IF NOT EXISTS rising_alerts (
 );
 """
 
+# Spalten, die nach dem initialen Schema per ALTER TABLE nachgezogen wurden -
+# neue Installationen bekommen sie schon über _SCHEMA, bestehende
+# history.sqlite3-Dateien (z.B. der GitHub-Actions-Cache) brauchen die
+# Migration hier, sonst schlägt der nächste INSERT mit "no column named
+# price" fehl.
+_MIGRATIONS = {
+    "snapshots": [("price", "REAL")],
+}
+
 
 @dataclass(frozen=True)
 class Snapshot:
@@ -66,11 +75,22 @@ class Snapshot:
     score_total: int
     risk_level: str
     creator_authority: str | None = None
+    price: float | None = None
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, columns in _MIGRATIONS.items():
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        for name, sql_type in columns:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
+    conn.commit()
 
 
 def connect(db_path=HISTORY_DB_PATH) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.executescript(_SCHEMA)
+    _migrate(conn)
     return conn
 
 
@@ -78,8 +98,8 @@ def record_snapshot(conn: sqlite3.Connection, snapshot: Snapshot) -> None:
     conn.execute(
         """INSERT INTO snapshots
            (address, symbol, scanned_at, liquidity_usd, volume_24h_usd, holder_count,
-            top10_percent, score_total, risk_level, creator_authority)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            top10_percent, score_total, risk_level, creator_authority, price)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             snapshot.address,
             snapshot.symbol,
@@ -91,6 +111,7 @@ def record_snapshot(conn: sqlite3.Connection, snapshot: Snapshot) -> None:
             snapshot.score_total,
             snapshot.risk_level,
             snapshot.creator_authority,
+            snapshot.price,
         ),
     )
     conn.commit()
@@ -102,7 +123,7 @@ def previous_snapshot(conn: sqlite3.Connection, address: str) -> Snapshot | None
     liefert sie den gerade selbst geschriebenen Snapshot zurück."""
     row = conn.execute(
         """SELECT address, symbol, scanned_at, liquidity_usd, volume_24h_usd, holder_count,
-                  top10_percent, score_total, risk_level, creator_authority
+                  top10_percent, score_total, risk_level, creator_authority, price
            FROM snapshots WHERE address = ? ORDER BY scanned_at DESC LIMIT 1""",
         (address,),
     ).fetchone()
@@ -126,7 +147,7 @@ def creator_history(conn: sqlite3.Connection, creator_authority: str) -> list[Sn
     """Alle bisherigen Snapshots von Coins mit dieser Creator-Wallet."""
     rows = conn.execute(
         """SELECT address, symbol, scanned_at, liquidity_usd, volume_24h_usd, holder_count,
-                  top10_percent, score_total, risk_level, creator_authority
+                  top10_percent, score_total, risk_level, creator_authority, price
            FROM snapshots WHERE creator_authority = ? ORDER BY scanned_at ASC""",
         (creator_authority,),
     ).fetchall()
@@ -139,7 +160,7 @@ def first_snapshot(conn: sqlite3.Connection, address: str) -> Snapshot | None:
     previous_snapshot, das den letzten Stand vor dem aktuellen Lauf liefert)."""
     row = conn.execute(
         """SELECT address, symbol, scanned_at, liquidity_usd, volume_24h_usd, holder_count,
-                  top10_percent, score_total, risk_level, creator_authority
+                  top10_percent, score_total, risk_level, creator_authority, price
            FROM snapshots WHERE address = ? ORDER BY scanned_at ASC LIMIT 1""",
         (address,),
     ).fetchone()
@@ -166,7 +187,7 @@ def watchlist_candidates(conn: sqlite3.Connection, limit: int) -> list[Snapshot]
     rows = conn.execute(
         """
         SELECT s1.address, s1.symbol, s1.scanned_at, s1.liquidity_usd, s1.volume_24h_usd,
-               s1.holder_count, s1.top10_percent, s1.score_total, s1.risk_level, s1.creator_authority
+               s1.holder_count, s1.top10_percent, s1.score_total, s1.risk_level, s1.creator_authority, s1.price
         FROM snapshots s1
         WHERE s1.scanned_at = (SELECT MAX(s2.scanned_at) FROM snapshots s2 WHERE s2.address = s1.address)
           AND s1.risk_level IN ('NIEDRIG', 'MITTEL')
@@ -175,5 +196,22 @@ def watchlist_candidates(conn: sqlite3.Connection, limit: int) -> list[Snapshot]
         LIMIT ?
         """,
         (limit,),
+    ).fetchall()
+    return [Snapshot(*row) for row in rows]
+
+
+def all_first_snapshots(conn: sqlite3.Connection) -> list[Snapshot]:
+    """Der jeweils erste Snapshot für JEDE bekannte Adresse - Grundlage fürs
+    Backtesting (siehe backtest.py): Score/Preis zum Zeitpunkt der
+    Erstsichtung, um später gegen die tatsächliche Kursentwicklung
+    (OHLCV) zu vergleichen."""
+    rows = conn.execute(
+        """
+        SELECT s1.address, s1.symbol, s1.scanned_at, s1.liquidity_usd, s1.volume_24h_usd,
+               s1.holder_count, s1.top10_percent, s1.score_total, s1.risk_level, s1.creator_authority, s1.price
+        FROM snapshots s1
+        WHERE s1.scanned_at = (SELECT MIN(s2.scanned_at) FROM snapshots s2 WHERE s2.address = s1.address)
+        ORDER BY s1.scanned_at ASC
+        """
     ).fetchall()
     return [Snapshot(*row) for row in rows]

@@ -3,6 +3,7 @@ import pytest
 
 from history import (
     Snapshot,
+    all_first_snapshots,
     connect,
     creator_history,
     first_snapshot,
@@ -35,6 +36,7 @@ def _snapshot(address="addr1", symbol="ABC", scanned_at="2026-09-09T00:00:00+00:
         score_total=70,
         risk_level="MITTEL",
         creator_authority=None,
+        price=0.001,
     )
     params.update(overrides)
     return Snapshot(**params)
@@ -147,3 +149,80 @@ def test_watchlist_candidates_respects_limit(conn):
 
     results = watchlist_candidates(conn, limit=2)
     assert len(results) == 2
+
+
+def test_price_round_trips_through_record_and_retrieve(conn):
+    record_snapshot(conn, _snapshot(price=0.00012345))
+    result = previous_snapshot(conn, "addr1")
+    assert result.price == 0.00012345
+
+
+def test_price_defaults_to_none_when_not_given():
+    snapshot = Snapshot(
+        address="addr1", symbol="ABC", scanned_at="2026-09-09T00:00:00+00:00",
+        liquidity_usd=1_000.0, volume_24h_usd=500.0, holder_count=10,
+        top10_percent=50.0, score_total=40, risk_level="HOCH",
+    )
+    assert snapshot.price is None
+
+
+def test_all_first_snapshots_returns_one_row_per_address(conn):
+    record_snapshot(conn, _snapshot(address="a1", scanned_at="2026-09-09T00:00:00+00:00", price=1.0))
+    record_snapshot(conn, _snapshot(address="a1", scanned_at="2026-09-09T00:10:00+00:00", price=2.0))
+    record_snapshot(conn, _snapshot(address="a2", scanned_at="2026-09-09T00:05:00+00:00", price=5.0))
+
+    results = all_first_snapshots(conn)
+
+    by_address = {s.address: s for s in results}
+    assert set(by_address) == {"a1", "a2"}
+    assert by_address["a1"].price == 1.0  # der erste, nicht der letzte Snapshot
+    assert by_address["a2"].price == 5.0
+
+
+def test_all_first_snapshots_is_empty_for_fresh_db(conn):
+    assert all_first_snapshots(conn) == []
+
+
+def test_connect_migrates_pre_existing_db_without_price_column(tmp_path):
+    """Simuliert eine bereits bestehende history.sqlite3 von vor der
+    price-Spalte (z.B. der GitHub-Actions-Cache) - connect() muss sie ohne
+    Datenverlust nachziehen, sonst schlägt der nächste record_snapshot()
+    mit "no column named price" fehl."""
+    import sqlite3
+
+    db_path = tmp_path / "old.sqlite3"
+    old_conn = sqlite3.connect(db_path)
+    old_conn.execute(
+        """CREATE TABLE snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            address TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            scanned_at TEXT NOT NULL,
+            liquidity_usd REAL,
+            volume_24h_usd REAL,
+            holder_count INTEGER,
+            top10_percent REAL,
+            score_total INTEGER NOT NULL,
+            risk_level TEXT NOT NULL,
+            creator_authority TEXT
+        )"""
+    )
+    old_conn.execute(
+        "INSERT INTO snapshots (address, symbol, scanned_at, score_total, risk_level) "
+        "VALUES ('addr1', 'OLD', '2026-09-09T00:00:00+00:00', 50, 'MITTEL')"
+    )
+    old_conn.commit()
+    old_conn.close()
+
+    migrated_conn = connect(db_path=str(db_path))
+    try:
+        # alte Zeile bleibt erhalten, price ist NULL statt eines Fehlers
+        old_row = previous_snapshot(migrated_conn, "addr1")
+        assert old_row is not None
+        assert old_row.price is None
+
+        # neue Zeilen koennen price setzen
+        record_snapshot(migrated_conn, _snapshot(address="addr2", price=0.5))
+        assert previous_snapshot(migrated_conn, "addr2").price == 0.5
+    finally:
+        migrated_conn.close()

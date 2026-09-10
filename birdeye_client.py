@@ -97,3 +97,35 @@ class BirdeyeClient:
             {"address": address, "offset": 0, "limit": limit},
         )
         return data.get("data", {})
+
+    def get_ohlcv(
+        self,
+        address: str,
+        type_: str = "1H",
+        time_from: int | None = None,
+        time_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Historische Kerzen (o/h/l/c/v je Zeitfenster) - Grundlage fürs
+        Backtesting (siehe backtest.py). time_from/time_to sind Unix-Timestamps."""
+        params: dict[str, Any] = {"address": address, "type": type_}
+        if time_from is not None:
+            params["time_from"] = time_from
+        if time_to is not None:
+            params["time_to"] = time_to
+        data = self._get("/defi/v3/ohlcv", params)
+        return data.get("data", {}).get("items", [])
+
+    def get_top_traders(
+        self,
+        address: str,
+        sort_by: str = "volume",
+        sort_type: str = "desc",
+        offset: int = 0,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Top-Trader eines Tokens (für spätere Smart-Money-Erkennung)."""
+        data = self._get(
+            "/defi/v2/tokens/top_traders",
+            {"address": address, "sort_by": sort_by, "sort_type": sort_type, "offset": offset, "limit": limit},
+        )
+        return data.get("data", {}).get("items", [])

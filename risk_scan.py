@@ -59,6 +59,7 @@ class TokenAssessment:
     report: RiskReport
     score: Score
     liquidity_usd: float | None
+    price: float | None = None
 
 
 def assess_token(
@@ -73,6 +74,7 @@ def assess_token(
     top10_percent = None
     holder_count = None
     liquidity_usd = None
+    price = None
     volume_24h_usd = None
     trade_24h = None
     unique_wallet_24h = None
@@ -100,6 +102,7 @@ def assess_token(
             time.sleep(RISK_SCAN_THROTTLE_SECONDS)
             trade_data = client.get_trade_data(address)
             liquidity_usd = market_data.get("liquidity") or 0
+            price = market_data.get("price")
             volume_24h_usd = trade_data.get("volume_24h_usd") or 0
             trade_24h = trade_data.get("trade_24h") or 0
             unique_wallet_24h = trade_data.get("unique_wallet_24h") or 0
@@ -158,9 +161,10 @@ def assess_token(
             score_total=score.total,
             risk_level=report.overall.name,
             creator_authority=update_authority,
+            price=price,
         ))
 
-    return TokenAssessment(report=report, score=score, liquidity_usd=liquidity_usd)
+    return TokenAssessment(report=report, score=score, liquidity_usd=liquidity_usd, price=price)
 
 
 def _listing_label(listing: dict) -> str:

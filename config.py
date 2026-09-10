@@ -134,3 +134,15 @@ RISING_STAR_RECHECK_LIMIT = 10
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 TELEGRAM_ENABLED = bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
+
+# Backtesting (backtest.py): wie weit nach der Erstsichtung die tatsächliche
+# Kursentwicklung geprüft wird, und Pause zwischen den OHLCV-Calls.
+BACKTEST_HORIZON_MINUTES = 60
+BACKTEST_THROTTLE_SECONDS = 0.5
+
+# Paper Trading (paper_trading.py): virtuelle Positionsgröße pro "Trade" (nur
+# fürs P&L in USD, es fließt kein echtes Geld) sowie Exit-Regeln.
+PAPER_TRADE_SIZE_USD = 100.0
+PAPER_TAKE_PROFIT_PERCENT = 100.0   # +100% -> Position schließen
+PAPER_STOP_LOSS_PERCENT = -50.0     # -50% -> Position schließen
+PAPER_MAX_HOLD_MINUTES = 240        # spätestens nach 4h schließen, egal was

@@ -1,7 +1,8 @@
 """Tests für einen einzelnen Monitor-Scan-Zyklus - gemockt, kein Netzwerk,
 kein echter Sleep/Loop, kein echter Telegram-Versand."""
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import paper_trading
 from history import Snapshot, connect, has_been_alerted, has_been_rising_alerted, mark_alerted, mark_rising_alerted
 from monitor import scan_once
 from risk import RiskFinding, Severity, build_report
@@ -10,12 +11,12 @@ from score import Score
 from telegram_alerts import TelegramError
 
 
-def _result(symbol, address, score_total, findings=None):
+def _result(symbol, address, score_total, findings=None, price=None):
     findings = findings or []
     report = build_report(address, symbol, findings, [])
     score = Score(total=score_total, capped=False, breakdown=[])
     listing = {"address": address, "symbol": symbol, "liquidityAddedAt": "2026-09-09T00:00:00"}
-    return listing, TokenAssessment(report=report, score=score, liquidity_usd=1_000)
+    return listing, TokenAssessment(report=report, score=score, liquidity_usd=1_000, price=price)
 
 
 def _first_snapshot(address="addr1", liquidity_usd=1_000.0):
@@ -239,5 +240,88 @@ def test_rising_alert_is_persisted_and_independent_of_regular_alerts(mock_scan, 
         scan_once(client=object(), conn=conn)
         assert has_been_rising_alerted(conn, "addr1")
         assert not has_been_alerted(conn, "addr1")  # regulaere Alert-Kategorie unberuehrt
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_alert_with_price_opens_a_paper_trade(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = [_result("HOT", "addr1", 85, price=0.001)]
+    mock_recheck.return_value = []
+    client = MagicMock()
+    client.get_price.return_value = {"value": 0.001}  # unveraendert -> kein Exit-Trigger
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=client, conn=conn)
+        assert paper_trading.has_open_trade(conn, "addr1")
+        trade = paper_trading.open_trades(conn)[0]
+        assert trade.entry_price == 0.001
+        assert trade.symbol == "HOT"
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_alert_without_price_does_not_open_a_paper_trade(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = [_result("HOT", "addr1", 85, price=None)]
+    mock_recheck.return_value = []
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=MagicMock(), conn=conn)
+        assert not paper_trading.has_open_trade(conn, "addr1")
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_existing_paper_trade_is_not_opened_twice(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = [_result("HOT", "addr1", 85, price=0.001)]
+    mock_recheck.return_value = []
+    client = MagicMock()
+    client.get_price.return_value = {"value": 0.0005}  # unveraendert -> kein Exit-Trigger
+    conn = connect(db_path=":memory:")
+    try:
+        paper_trading.ensure_schema(conn)
+        paper_trading.open_trade(conn, "addr1", "HOT", entry_price=0.0005, entry_score=50, entry_risk_level="MITTEL")
+
+        scan_once(client=client, conn=conn)
+
+        assert len(paper_trading.open_trades(conn)) == 1
+        assert paper_trading.open_trades(conn)[0].entry_price == 0.0005  # unveraendert, kein zweiter Trade
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_open_paper_trade_gets_closed_and_alerted_on_take_profit(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = []
+    mock_recheck.return_value = []
+    conn = connect(db_path=":memory:")
+    try:
+        paper_trading.ensure_schema(conn)
+        paper_trading.open_trade(conn, "addr1", "HOT", entry_price=1.0, entry_score=60, entry_risk_level="MITTEL")
+
+        client = MagicMock()
+        client.get_price.return_value = {"value": 2.5}  # +150% -> Take-Profit
+
+        scan_once(client=client, conn=conn)
+
+        assert not paper_trading.has_open_trade(conn, "addr1")
+        closed = paper_trading.closed_trades(conn)
+        assert len(closed) == 1
+        assert closed[0].exit_reason == "TAKE_PROFIT"
+        assert any("Paper-Trade" in call.args[0] for call in mock_alert.call_args_list)
     finally:
         conn.close()
