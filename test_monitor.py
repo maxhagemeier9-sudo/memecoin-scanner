@@ -305,6 +305,31 @@ def test_existing_paper_trade_is_not_opened_twice(mock_scan, mock_alert, mock_re
 @patch("monitor.recheck_watchlist")
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
+def test_only_the_best_scoring_alert_opens_a_paper_trade(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = [
+        _result("LOW", "addr1", 71, price=0.001),
+        _result("BEST", "addr2", 90, price=0.002),
+    ]
+    mock_recheck.return_value = []
+    client = MagicMock()
+    client.get_token_price.return_value = 0.002  # == Entry-Preis von BEST -> kein Exit-Trigger
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=client, conn=conn)
+
+        assert not paper_trading.has_open_trade(conn, "addr1")
+        assert paper_trading.has_open_trade(conn, "addr2")
+        open_trades = paper_trading.open_trades(conn)
+        assert len(open_trades) == 1
+        assert open_trades[0].symbol == "BEST"
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
 def test_open_paper_trade_gets_closed_and_alerted_on_take_profit(mock_scan, mock_alert, mock_recheck, mock_send):
     mock_scan.return_value = []
     mock_recheck.return_value = []

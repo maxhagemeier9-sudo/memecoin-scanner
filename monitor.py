@@ -4,10 +4,12 @@ mehrfach zu melden. Beenden mit Strg+C.
 
 Nutzt dieselbe Historie-DB wie risk_scan.py, dadurch profitieren auch die
 Trend-/Creator-Signale (evaluate_liquidity_trend, evaluate_creator_history)
-vom wiederholten Scannen über die Zeit. Jeder Alert (regulär oder Rising
-Coin) eröffnet zusätzlich eine simulierte Paper-Trading-Position (siehe
-paper_trading.py) - so lässt sich messen, ob unsere Signale tatsächlich
-profitabel gewesen wären, bevor echtes Geld involviert ist.
+vom wiederholten Scannen über die Zeit. Pro Scan-Zyklus wird nicht für
+jeden Alert eine Paper-Trading-Position eröffnet, sondern nur für den am
+besten bewerteten Kandidaten (höchster Score) - so bleibt das Paper-Depot
+fokussiert auf das jeweils stärkste Signal statt bei jedem Treffer zu
+streuen. Alerts (Telegram) werden davon unabhängig weiterhin für jeden
+qualifizierenden Coin verschickt.
 """
 from __future__ import annotations
 
@@ -73,6 +75,10 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
     has_been_rising_alerted) statt über ein In-Memory-Set, damit sie auch über
     mehrere unabhängige Prozess-Starts hinweg funktioniert (z.B. ein frischer
     Prozess pro GitHub-Actions-Trigger statt eines Dauerlaufs).
+
+    Alerts werden für jeden qualifizierenden Coin verschickt, aber nur der
+    Kandidat mit dem höchsten Score bekommt pro Zyklus eine Paper-Trading-
+    Position eröffnet (siehe _maybe_open_paper_trade).
     """
     paper_trading.ensure_schema(conn)
 
@@ -84,6 +90,8 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
     except TelegramError as exc:
         print(f"   (Telegram-Zusammenfassung fehlgeschlagen: {exc})")
 
+    best_candidate: TokenAssessment | None = None
+
     for listing, assessment in results:
         address = listing["address"]
         if history.has_been_alerted(conn, address):
@@ -94,7 +102,8 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
                 f"Risiko {assessment.report.overall.name} ({address})"
             )
             history.mark_alerted(conn, address)
-            _maybe_open_paper_trade(conn, assessment)
+            if best_candidate is None or assessment.score.total > best_candidate.score.total:
+                best_candidate = assessment
 
     for first, assessment in recheck_watchlist(client, conn):
         address = assessment.report.address
@@ -108,7 +117,11 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
                 f"Risiko {assessment.report.overall.name} ({address})"
             )
             history.mark_rising_alerted(conn, address)
-            _maybe_open_paper_trade(conn, assessment)
+            if best_candidate is None or assessment.score.total > best_candidate.score.total:
+                best_candidate = assessment
+
+    if best_candidate is not None:
+        _maybe_open_paper_trade(conn, best_candidate)
 
     for trade, reason, exit_price in paper_trading.process_open_trades(client, conn):
         pnl_percent = (exit_price - trade.entry_price) / trade.entry_price * 100
