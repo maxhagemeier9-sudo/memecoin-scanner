@@ -5,10 +5,14 @@ from history import (
     Snapshot,
     connect,
     creator_history,
+    first_snapshot,
     has_been_alerted,
+    has_been_rising_alerted,
     mark_alerted,
+    mark_rising_alerted,
     previous_snapshot,
     record_snapshot,
+    watchlist_candidates,
 )
 
 
@@ -93,3 +97,53 @@ def test_mark_alerted_is_idempotent(conn):
 def test_other_addresses_remain_unaffected_by_mark_alerted(conn):
     mark_alerted(conn, "addr1")
     assert has_been_alerted(conn, "addr2") is False
+
+
+def test_first_snapshot_is_none_when_never_scanned(conn):
+    assert first_snapshot(conn, "unknown") is None
+
+
+def test_first_snapshot_returns_the_oldest_not_the_newest(conn):
+    record_snapshot(conn, _snapshot(scanned_at="2026-09-09T00:00:00+00:00", liquidity_usd=1_000.0))
+    record_snapshot(conn, _snapshot(scanned_at="2026-09-09T00:10:00+00:00", liquidity_usd=5_000.0))
+    result = first_snapshot(conn, "addr1")
+    assert result.liquidity_usd == 1_000.0
+
+
+def test_rising_alert_tracking_is_independent_of_regular_alerts(conn):
+    mark_alerted(conn, "addr1")
+    assert has_been_rising_alerted(conn, "addr1") is False
+    mark_rising_alerted(conn, "addr1")
+    assert has_been_rising_alerted(conn, "addr1") is True
+    assert has_been_alerted(conn, "addr1") is True  # unveraendert
+
+
+def test_watchlist_candidates_excludes_single_scan_addresses(conn):
+    record_snapshot(conn, _snapshot(address="a1", risk_level="MITTEL"))  # nur 1x gescannt
+    results = watchlist_candidates(conn, limit=10)
+    assert results == []
+
+
+def test_watchlist_candidates_excludes_hoch_risk(conn):
+    record_snapshot(conn, _snapshot(address="a1", scanned_at="2026-09-09T00:00:00+00:00", risk_level="HOCH"))
+    record_snapshot(conn, _snapshot(address="a1", scanned_at="2026-09-09T00:10:00+00:00", risk_level="HOCH"))
+    results = watchlist_candidates(conn, limit=10)
+    assert results == []
+
+
+def test_watchlist_candidates_includes_mittel_and_niedrig_multi_scan_addresses(conn):
+    for risk in ("MITTEL", "NIEDRIG"):
+        record_snapshot(conn, _snapshot(address=f"a-{risk}", scanned_at="2026-09-09T00:00:00+00:00", risk_level=risk))
+        record_snapshot(conn, _snapshot(address=f"a-{risk}", scanned_at="2026-09-09T00:10:00+00:00", risk_level=risk))
+
+    results = watchlist_candidates(conn, limit=10)
+    assert {s.address for s in results} == {"a-MITTEL", "a-NIEDRIG"}
+
+
+def test_watchlist_candidates_respects_limit(conn):
+    for i in range(5):
+        record_snapshot(conn, _snapshot(address=f"a{i}", scanned_at=f"2026-09-09T00:0{i}:00+00:00", risk_level="MITTEL"))
+        record_snapshot(conn, _snapshot(address=f"a{i}", scanned_at=f"2026-09-09T00:1{i}:00+00:00", risk_level="MITTEL"))
+
+    results = watchlist_candidates(conn, limit=2)
+    assert len(results) == 2

@@ -28,11 +28,14 @@ from datetime import datetime, timezone
 import history
 from birdeye_client import BirdeyeAPIError, BirdeyeClient
 from config import (
+    DEFAULT_RISK_THRESHOLDS,
     EXPORT_RESULTS,
     RANKING_SCAN_LIMIT,
     RANKING_SCAN_PAGES,
     RANKING_TOP_N,
+    RISING_STAR_RECHECK_LIMIT,
     RISK_SCAN_THROTTLE_SECONDS,
+    RiskThresholds,
 )
 from export import export_ranking
 from new_coins import age_minutes, format_age
@@ -182,6 +185,51 @@ def scan_new_coins(
     for listing in listings:
         assessment = assess_token(client, listing["address"], _listing_label(listing), conn=conn)
         results.append((listing, assessment))
+        time.sleep(RISK_SCAN_THROTTLE_SECONDS)
+
+    return results
+
+
+def is_rising(
+    first: history.Snapshot,
+    assessment: TokenAssessment,
+    thresholds: RiskThresholds = DEFAULT_RISK_THRESHOLDS,
+) -> bool:
+    """Ein bereits bekannter Coin gilt als "Rising", wenn er inzwischen
+    höchstens MITTEL-Risiko hat UND seine Liquidität seit der allerersten
+    Sichtung um mindestens `rising_star_min_liquidity_growth` gewachsen ist.
+    Das sind typischerweise Coins, die noch früh genug sind, aber schon genug
+    Substanz haben, um z.B. auch in kuratierten Trading-Apps aufzutauchen.
+    """
+    if assessment.report.overall not in (Severity.NIEDRIG, Severity.MITTEL):
+        return False
+
+    if first.liquidity_usd is None or assessment.liquidity_usd is None or first.liquidity_usd <= 0:
+        return False
+
+    growth = (assessment.liquidity_usd - first.liquidity_usd) / first.liquidity_usd
+    return growth >= thresholds.rising_star_min_liquidity_growth
+
+
+def recheck_watchlist(
+    client: BirdeyeClient,
+    conn: sqlite3.Connection,
+    limit: int = RISING_STAR_RECHECK_LIMIT,
+) -> list[tuple[history.Snapshot, TokenAssessment]]:
+    """Prüft bereits bekannte, bisher unauffällige Coins (NIEDRIG/MITTEL-Risiko,
+    mind. 2 Snapshots) erneut direkt per Adresse nach - unabhängig davon, ob
+    sie noch in den neuesten new_listing-Einträgen auftauchen (die fallen
+    nach ca. 10-20 Min aus diesem Fenster raus, siehe scan_new_coins). Liefert
+    (erster Snapshot, aktuelle Bewertung) je Kandidat, Grundlage für
+    "Rising Coin"-Alerts (siehe is_rising, monitor.scan_once).
+    """
+    candidates = history.watchlist_candidates(conn, limit=limit)
+    results = []
+
+    for candidate in candidates:
+        first = history.first_snapshot(conn, candidate.address)
+        assessment = assess_token(client, candidate.address, candidate.symbol, conn=conn)
+        results.append((first, assessment))
         time.sleep(RISK_SCAN_THROTTLE_SECONDS)
 
     return results

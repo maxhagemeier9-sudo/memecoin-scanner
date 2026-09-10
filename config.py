@@ -59,6 +59,9 @@ class RiskThresholds:
     # Liquiditäts-Einbruch seit dem letzten Scan derselben Adresse, in Prozent
     liquidity_crash_percent_high: float = 50.0
     liquidity_crash_percent_medium: float = 20.0
+    # Ab wie viel Liquiditäts-Wachstum seit der ERSTEN Sichtung ein bereits
+    # bekannter Coin mit NIEDRIG/MITTEL-Risiko als "Rising Coin" gilt (0.5 = +50%)
+    rising_star_min_liquidity_growth: float = 0.5
 
 
 DEFAULT_RISK_THRESHOLDS = RiskThresholds()
@@ -119,6 +122,12 @@ EXPORT_DIR = Path(__file__).parent / "exports"
 # Monitor-Modus (monitor.py): Dauerlauf mit Alert bei Score-Schwelle
 MONITOR_INTERVAL_SECONDS = 120
 MONITOR_ALERT_SCORE_THRESHOLD = 70
+
+# Wie viele bereits bekannte, unauffällige Coins (NIEDRIG/MITTEL-Risiko) pro
+# Lauf zusätzlich direkt per Adresse erneut geprüft werden ("Rising Coins") -
+# unabhängig davon, ob sie noch in den neuesten new_listing-Einträgen
+# auftauchen (die fallen nach ca. 10-20 Min aus diesem Fenster raus).
+RISING_STAR_RECHECK_LIMIT = 10
 
 # Telegram-Alerts - optional. Wenn beide Werte fehlen, bleibt Telegram
 # einfach deaktiviert (siehe telegram_alerts.py), kein Crash.

@@ -18,7 +18,14 @@ from alerts import alert
 from birdeye_client import BirdeyeAPIError, BirdeyeClient
 from config import MONITOR_ALERT_SCORE_THRESHOLD, MONITOR_INTERVAL_SECONDS
 from risk import Severity
-from risk_scan import TokenAssessment, _print_ranking, format_telegram_summary, scan_new_coins
+from risk_scan import (
+    TokenAssessment,
+    _print_ranking,
+    format_telegram_summary,
+    is_rising,
+    recheck_watchlist,
+    scan_new_coins,
+)
 from telegram_alerts import TelegramError, send_telegram_message
 
 
@@ -35,13 +42,15 @@ def _should_alert(assessment: TokenAssessment) -> bool:
 
 def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
     """Ein Scan-Zyklus: scannen, anzeigen, Zusammenfassung an Telegram
-    schicken, neue auffällige Coins (siehe _should_alert) zusätzlich alarmieren.
+    schicken, neue auffällige Coins (siehe _should_alert) zusätzlich
+    alarmieren, danach die Watchlist bereits bekannter Coins auf Wachstum
+    prüfen ("Rising Coins", siehe risk_scan.recheck_watchlist/is_rising).
     Getrennt von der Endlosschleife, damit es isoliert testbar ist.
 
-    Die Alert-Deduplizierung läuft über die Historie-DB (history.has_been_alerted)
-    statt über ein In-Memory-Set, damit sie auch über mehrere unabhängige
-    Prozess-Starts hinweg funktioniert (z.B. ein frischer Prozess pro
-    GitHub-Actions-Trigger statt eines Dauerlaufs).
+    Die Alert-Deduplizierung läuft über die Historie-DB (history.has_been_alerted/
+    has_been_rising_alerted) statt über ein In-Memory-Set, damit sie auch über
+    mehrere unabhängige Prozess-Starts hinweg funktioniert (z.B. ein frischer
+    Prozess pro GitHub-Actions-Trigger statt eines Dauerlaufs).
     """
     results = scan_new_coins(client, conn=conn)
     _print_ranking(results)
@@ -61,6 +70,19 @@ def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
                 f"Risiko {assessment.report.overall.name} ({address})"
             )
             history.mark_alerted(conn, address)
+
+    for first, assessment in recheck_watchlist(client, conn):
+        address = assessment.report.address
+        if history.has_been_rising_alerted(conn, address):
+            continue
+        if is_rising(first, assessment):
+            growth_percent = (assessment.liquidity_usd - first.liquidity_usd) / first.liquidity_usd * 100
+            alert(
+                f"📈 Rising Coin: {assessment.report.symbol} - Liquidität +{growth_percent:.0f}% "
+                f"seit Erstsichtung, jetzt Score {assessment.score.total}/100, "
+                f"Risiko {assessment.report.overall.name} ({address})"
+            )
+            history.mark_rising_alerted(conn, address)
 
 
 def run_monitor(client: BirdeyeClient, conn: sqlite3.Connection) -> None:

@@ -2,7 +2,7 @@
 kein echter Sleep/Loop, kein echter Telegram-Versand."""
 from unittest.mock import patch
 
-from history import connect, has_been_alerted, mark_alerted
+from history import Snapshot, connect, has_been_alerted, has_been_rising_alerted, mark_alerted, mark_rising_alerted
 from monitor import scan_once
 from risk import RiskFinding, Severity, build_report
 from risk_scan import TokenAssessment
@@ -16,6 +16,21 @@ def _result(symbol, address, score_total, findings=None):
     score = Score(total=score_total, capped=False, breakdown=[])
     listing = {"address": address, "symbol": symbol, "liquidityAddedAt": "2026-09-09T00:00:00"}
     return listing, TokenAssessment(report=report, score=score, liquidity_usd=1_000)
+
+
+def _first_snapshot(address="addr1", liquidity_usd=1_000.0):
+    return Snapshot(
+        address=address, symbol="SYM", scanned_at="2026-09-09T00:00:00+00:00",
+        liquidity_usd=liquidity_usd, volume_24h_usd=1_000.0, holder_count=50,
+        top10_percent=40.0, score_total=50, risk_level="MITTEL",
+    )
+
+
+def _rising_assessment(address="addr1", liquidity_usd=3_000.0, overall=Severity.MITTEL):
+    report = build_report(address, "RISER", [], [])
+    object.__setattr__(report, "overall", overall)  # RiskReport ist frozen
+    score = Score(total=65, capped=False, breakdown=[])
+    return TokenAssessment(report=report, score=score, liquidity_usd=liquidity_usd)
 
 
 @patch("monitor.send_telegram_message")
@@ -159,5 +174,70 @@ def test_telegram_summary_failure_does_not_crash_scan(mock_scan, mock_alert, moc
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)  # darf nicht crashen
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_rising_coin_triggers_a_separate_alert(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = []  # kein regulärer Scan-Treffer in diesem Test
+    mock_recheck.return_value = [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0))]
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        mock_alert.assert_called_once()
+        assert "Rising Coin" in mock_alert.call_args[0][0]
+        assert "addr1" in mock_alert.call_args[0][0]
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_non_rising_watchlist_candidate_does_not_alert(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = []
+    # kaum Wachstum -> is_rising() liefert False
+    mock_recheck.return_value = [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=1_050.0))]
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        mock_alert.assert_not_called()
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_already_rising_alerted_address_is_not_alerted_again(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = []
+    mock_recheck.return_value = [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0))]
+    conn = connect(db_path=":memory:")
+    try:
+        mark_rising_alerted(conn, "addr1")
+        scan_once(client=object(), conn=conn)
+        mock_alert.assert_not_called()
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_rising_alert_is_persisted_and_independent_of_regular_alerts(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = []
+    mock_recheck.return_value = [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0))]
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        assert has_been_rising_alerted(conn, "addr1")
+        assert not has_been_alerted(conn, "addr1")  # regulaere Alert-Kategorie unberuehrt
     finally:
         conn.close()

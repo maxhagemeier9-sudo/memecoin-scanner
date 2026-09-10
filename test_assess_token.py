@@ -9,7 +9,8 @@ import pytest
 from birdeye_client import BirdeyeAPIError
 from history import Snapshot, connect, record_snapshot
 from risk import Severity
-from risk_scan import _listing_label, assess_token, scan_new_coins
+from risk_scan import TokenAssessment, _listing_label, assess_token, is_rising, recheck_watchlist, scan_new_coins
+from score import Score
 from solana_rpc import MintAuthorities, SolanaRPCError
 
 
@@ -150,6 +151,78 @@ def test_listing_label_falls_back_to_name_when_symbol_missing():
 
 def test_listing_label_falls_back_to_placeholder_when_both_missing():
     assert _listing_label({"symbol": None, "name": None}) == "???"
+
+
+def _snapshot(address="addr", liquidity_usd=1_000.0, risk_level="MITTEL", scanned_at="2026-09-09T00:00:00+00:00"):
+    return Snapshot(
+        address=address, symbol="SYM", scanned_at=scanned_at, liquidity_usd=liquidity_usd,
+        volume_24h_usd=1_000.0, holder_count=50, top10_percent=40.0, score_total=50,
+        risk_level=risk_level,
+    )
+
+
+def _assessment(overall=Severity.MITTEL, liquidity_usd=1_500.0, address="addr"):
+    from risk import build_report
+
+    report = build_report(address, "SYM", [], [])
+    object.__setattr__(report, "overall", overall)  # RiskReport ist frozen
+    score = Score(total=60, capped=False, breakdown=[])
+    return TokenAssessment(report=report, score=score, liquidity_usd=liquidity_usd)
+
+
+def test_is_rising_true_when_liquidity_grew_enough_and_risk_acceptable():
+    first = _snapshot(liquidity_usd=1_000.0)
+    assessment = _assessment(overall=Severity.MITTEL, liquidity_usd=2_000.0)  # +100%
+    assert is_rising(first, assessment) is True
+
+
+def test_is_rising_false_when_growth_too_small():
+    first = _snapshot(liquidity_usd=1_000.0)
+    assessment = _assessment(overall=Severity.MITTEL, liquidity_usd=1_100.0)  # +10%
+    assert is_rising(first, assessment) is False
+
+
+def test_is_rising_false_when_risk_is_hoch():
+    first = _snapshot(liquidity_usd=1_000.0)
+    assessment = _assessment(overall=Severity.HOCH, liquidity_usd=5_000.0)  # starkes Wachstum, aber riskant
+    assert is_rising(first, assessment) is False
+
+
+def test_is_rising_false_when_first_liquidity_missing():
+    first = _snapshot(liquidity_usd=None)
+    assessment = _assessment(liquidity_usd=5_000.0)
+    assert is_rising(first, assessment) is False
+
+
+@patch("risk_scan.get_mint_authorities")
+def test_recheck_watchlist_rechecks_known_candidates_and_returns_first_and_current(mock_authorities):
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None)
+    conn = connect(db_path=":memory:")
+    try:
+        record_snapshot(conn, _snapshot(address="addr1", liquidity_usd=1_000.0, scanned_at="2026-09-09T00:00:00+00:00"))
+        record_snapshot(conn, _snapshot(address="addr1", liquidity_usd=1_500.0, scanned_at="2026-09-09T00:10:00+00:00"))
+
+        client = _client(market_data={"liquidity": 3_000.0})
+        results = recheck_watchlist(client, conn, limit=10)
+
+        assert len(results) == 1
+        first, assessment = results[0]
+        assert first.liquidity_usd == 1_000.0  # allererster Snapshot, nicht der letzte
+        assert assessment.liquidity_usd == 3_000.0
+    finally:
+        conn.close()
+
+
+@patch("risk_scan.get_mint_authorities")
+def test_recheck_watchlist_ignores_addresses_seen_only_once(mock_authorities):
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None)
+    conn = connect(db_path=":memory:")
+    try:
+        record_snapshot(conn, _snapshot(address="addr1"))  # nur 1x
+        results = recheck_watchlist(_client(), conn, limit=10)
+        assert results == []
+    finally:
+        conn.close()
 
 
 @patch("risk_scan.get_mint_authorities")
