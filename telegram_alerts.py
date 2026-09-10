@@ -17,12 +17,14 @@ class TelegramError(RuntimeError):
     """Wird ausgelöst, wenn der Versand über die Telegram-API fehlschlägt."""
 
 
-def send_telegram_message(text: str) -> None:
+def send_telegram_message(text: str, parse_mode: str | None = None) -> None:
     if not TELEGRAM_ENABLED:
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
 
     try:
         response = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)

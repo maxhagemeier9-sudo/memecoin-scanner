@@ -1,5 +1,5 @@
 """Tests für einen einzelnen Monitor-Scan-Zyklus - gemockt, kein Netzwerk,
-kein echter Sleep/Loop."""
+kein echter Sleep/Loop, kein echter Telegram-Versand."""
 from unittest.mock import patch
 
 from history import connect, has_been_alerted, mark_alerted
@@ -7,6 +7,7 @@ from monitor import scan_once
 from risk import build_report
 from risk_scan import TokenAssessment
 from score import Score
+from telegram_alerts import TelegramError
 
 
 def _result(symbol, address, score_total):
@@ -16,9 +17,10 @@ def _result(symbol, address, score_total):
     return listing, TokenAssessment(report=report, score=score, liquidity_usd=1_000)
 
 
+@patch("monitor.send_telegram_message")
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
-def test_coin_above_threshold_triggers_alert(mock_scan, mock_alert):
+def test_coin_above_threshold_triggers_alert(mock_scan, mock_alert, mock_send):
     mock_scan.return_value = [_result("HOT", "addr1", 85)]
     conn = connect(db_path=":memory:")
     try:
@@ -29,9 +31,10 @@ def test_coin_above_threshold_triggers_alert(mock_scan, mock_alert):
         conn.close()
 
 
+@patch("monitor.send_telegram_message")
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
-def test_coin_below_threshold_does_not_alert(mock_scan, mock_alert):
+def test_coin_below_threshold_does_not_alert(mock_scan, mock_alert, mock_send):
     mock_scan.return_value = [_result("MEH", "addr1", 30)]
     conn = connect(db_path=":memory:")
     try:
@@ -41,9 +44,10 @@ def test_coin_below_threshold_does_not_alert(mock_scan, mock_alert):
         conn.close()
 
 
+@patch("monitor.send_telegram_message")
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
-def test_already_alerted_address_is_not_alerted_again(mock_scan, mock_alert):
+def test_already_alerted_address_is_not_alerted_again(mock_scan, mock_alert, mock_send):
     mock_scan.return_value = [_result("HOT", "addr1", 85)]
     conn = connect(db_path=":memory:")
     try:
@@ -54,9 +58,10 @@ def test_already_alerted_address_is_not_alerted_again(mock_scan, mock_alert):
         conn.close()
 
 
+@patch("monitor.send_telegram_message")
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
-def test_alerted_address_is_persisted_in_history_db(mock_scan, mock_alert):
+def test_alerted_address_is_persisted_in_history_db(mock_scan, mock_alert, mock_send):
     mock_scan.return_value = [_result("HOT", "addr1", 85)]
     conn = connect(db_path=":memory:")
     try:
@@ -66,9 +71,10 @@ def test_alerted_address_is_persisted_in_history_db(mock_scan, mock_alert):
         conn.close()
 
 
+@patch("monitor.send_telegram_message")
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
-def test_alert_dedup_survives_a_fresh_connection_to_the_same_db_file(mock_scan, mock_alert, tmp_path):
+def test_alert_dedup_survives_a_fresh_connection_to_the_same_db_file(mock_scan, mock_alert, mock_send, tmp_path):
     db_path = tmp_path / "history.sqlite3"
     mock_scan.return_value = [_result("HOT", "addr1", 85)]
 
@@ -83,3 +89,32 @@ def test_alert_dedup_survives_a_fresh_connection_to_the_same_db_file(mock_scan, 
         assert mock_alert.call_count == 1  # nicht beim zweiten Mal erneut alarmiert
     finally:
         conn2.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_every_scan_sends_a_telegram_summary_regardless_of_threshold(mock_scan, mock_alert, mock_send):
+    mock_scan.return_value = [_result("MEH", "addr1", 20)]  # weit unter der Alert-Schwelle
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        mock_send.assert_called_once()
+        text, kwargs = mock_send.call_args[0][0], mock_send.call_args[1]
+        assert "MEH" in text
+        assert "addr1" in text
+        assert kwargs.get("parse_mode") == "HTML"
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message", side_effect=TelegramError("boom"))
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_telegram_summary_failure_does_not_crash_scan(mock_scan, mock_alert, mock_send):
+    mock_scan.return_value = [_result("MEH", "addr1", 20)]
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)  # darf nicht crashen
+    finally:
+        conn.close()

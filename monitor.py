@@ -17,12 +17,14 @@ import history
 from alerts import alert
 from birdeye_client import BirdeyeAPIError, BirdeyeClient
 from config import MONITOR_ALERT_SCORE_THRESHOLD, MONITOR_INTERVAL_SECONDS
-from risk_scan import _print_ranking, scan_new_coins
+from risk_scan import _print_ranking, format_telegram_summary, scan_new_coins
+from telegram_alerts import TelegramError, send_telegram_message
 
 
 def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
-    """Ein Scan-Zyklus: scannen, anzeigen, neue Score-Schwellen-Überschreitungen
-    alarmieren. Getrennt von der Endlosschleife, damit es isoliert testbar ist.
+    """Ein Scan-Zyklus: scannen, anzeigen, Zusammenfassung an Telegram
+    schicken, neue Score-Schwellen-Überschreitungen zusätzlich alarmieren.
+    Getrennt von der Endlosschleife, damit es isoliert testbar ist.
 
     Die Alert-Deduplizierung läuft über die Historie-DB (history.has_been_alerted)
     statt über ein In-Memory-Set, damit sie auch über mehrere unabhängige
@@ -31,6 +33,11 @@ def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
     """
     results = scan_new_coins(client, conn=conn)
     _print_ranking(results)
+
+    try:
+        send_telegram_message(format_telegram_summary(results), parse_mode="HTML")
+    except TelegramError as exc:
+        print(f"   (Telegram-Zusammenfassung fehlgeschlagen: {exc})")
 
     for listing, assessment in results:
         address = listing["address"]

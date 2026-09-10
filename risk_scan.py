@@ -17,6 +17,7 @@ score.py für die Herleitung des Scores aus denselben Rohdaten.
 """
 from __future__ import annotations
 
+import html
 import sqlite3
 import time
 import unicodedata
@@ -204,6 +205,34 @@ def _top_finding_text(report: RiskReport, max_len: int = 42) -> str:
     worst = max(report.findings, key=lambda f: f.severity)
     text = worst.message
     return text if len(text) <= max_len else text[: max_len - 1] + "…"
+
+
+def format_telegram_summary(
+    results: list[tuple[dict, TokenAssessment]],
+    top_n: int = RANKING_TOP_N,
+) -> str:
+    """Nachrichtentext für Telegram (HTML-parse_mode) - eine Zusammenfassung
+    pro abgeschlossenem Scan, inkl. Adresse pro Coin zum direkten Kopieren.
+    Symbol wird HTML-escaped, weil Coin-Namen/Symbole aus der Birdeye-API
+    kommen und beliebige Zeichen enthalten können (z.B. "&", "<") - ohne
+    Escaping würde das die Telegram-HTML-Parsing brechen oder Markup injizieren.
+    """
+    ranked = rank_by_score(results, top_n)
+
+    lines = [f"📊 Scan abgeschlossen – Top {len(ranked)} von {len(results)} Coins"]
+
+    for rank, (listing, assessment) in enumerate(ranked, start=1):
+        report, score = assessment.report, assessment.score
+        icon = _score_icon(score.total)
+        cap_note = " (gedeckelt)" if score.capped else ""
+        symbol = html.escape(report.symbol)
+
+        lines.append(
+            f"\n{icon} {rank}. {symbol} — Score {score.total}/100{cap_note} — {report.overall.name}\n"
+            f"<code>{report.address}</code>"
+        )
+
+    return "\n".join(lines)
 
 
 def _print_ranking(results: list[tuple[dict, TokenAssessment]], top_n: int = RANKING_TOP_N) -> None:
