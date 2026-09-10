@@ -365,7 +365,7 @@ def test_open_paper_trade_gets_closed_and_alerted_on_take_profit(mock_scan, mock
         closed = paper_trading.closed_trades(conn)
         assert len(closed) == 1
         assert closed[0].exit_reason == "TAKE_PROFIT"
-        assert any("Paper-Trade" in call.args[0] for call in mock_send.call_args_list)
+        assert any("Paper-Trading" in call.args[0] for call in mock_send.call_args_list)
     finally:
         conn.close()
 
@@ -397,9 +397,13 @@ def test_many_closed_paper_trades_send_only_a_single_telegram_message(mock_scan,
         assert len(paper_trading.closed_trades(conn)) == 25
         closure_calls = [
             call for call in mock_send.call_args_list[calls_before:]
-            if "Paper-Trade" in call.args[0] and "geschlossen" in call.args[0]
+            if "Paper-Trading" in call.args[0] and "geschlossen" in call.args[0]
         ]
         assert len(closure_calls) == 1
-        assert "25 Paper-Trade(s) geschlossen" in closure_calls[0].args[0]
+        text = closure_calls[0].args[0]
+        assert "25 Position(en) geschlossen" in text
+        assert "25 Gewinn/0 Verlust" in text
+        # kurz statt einer Zeile pro Trade
+        assert len(text) < 100
     finally:
         conn.close()

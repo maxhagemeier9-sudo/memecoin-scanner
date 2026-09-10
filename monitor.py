@@ -54,18 +54,16 @@ def _maybe_open_paper_trade(conn: sqlite3.Connection, assessment: TokenAssessmen
 
 
 def _format_paper_trade_closures(closed: list[tuple]) -> str:
-    """Fasst alle in diesem Scan-Zyklus geschlossenen Paper-Trades in EINER
-    Nachricht zusammen, statt pro Trade einzeln zu alarmieren - bei vielen
-    gleichzeitig fälligen Positionen (z.B. nach einer längeren Pause oder
-    einem Backlog) sonst eine Telegram-Flut von Dutzenden Einzelnachrichten."""
-    lines = [f"📝 {len(closed)} Paper-Trade(s) geschlossen:"]
-    for trade, reason, exit_price in closed:
-        pnl_percent = (exit_price - trade.entry_price) / trade.entry_price * 100
-        lines.append(
-            f"{trade.symbol} - {reason}, {pnl_percent:+.0f}% "
-            f"(${trade.entry_price:.8f} -> ${exit_price:.8f}) ({trade.address})"
-        )
-    return "\n".join(lines)
+    """EINE kurze Zusammenfassungszeile für alle in diesem Scan-Zyklus
+    geschlossenen Paper-Trades, unabhängig davon wie viele es sind - bewusst
+    ohne Pro-Trade-Auflistung, damit die Nachricht bei vielen gleichzeitig
+    fälligen Positionen (z.B. nach einem Backlog) kurz bleibt statt lang zu
+    werden. Details stehen bei Bedarf im CI-Log bzw. paper_trading.py."""
+    count = len(closed)
+    pnl_percents = [(exit_price - trade.entry_price) / trade.entry_price * 100 for trade, _, exit_price in closed]
+    wins = sum(1 for p in pnl_percents if p > 0)
+    avg_pnl = sum(pnl_percents) / count
+    return f"📝 Paper-Trading: {count} Position(en) geschlossen ({wins} Gewinn/{count - wins} Verlust), Ø {avg_pnl:+.0f}%"
 
 
 def _should_alert(assessment: TokenAssessment) -> bool:
