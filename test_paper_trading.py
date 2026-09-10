@@ -1,6 +1,6 @@
 """Tests für Paper Trading - gemockt/offline, keine echten API-Calls."""
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,12 +12,15 @@ from paper_trading import (
     closed_trades,
     decide_exit,
     ensure_schema,
+    format_daily_summary,
     has_open_trade,
+    maybe_send_daily_summary,
     open_trade,
     open_trades,
     process_open_trades,
     summarize,
 )
+from telegram_alerts import TelegramError
 
 
 @pytest.fixture
@@ -161,3 +164,53 @@ def test_summarize_computes_win_rate_and_totals():
     assert result["win_rate_percent"] == 50.0
     assert result["total_pnl_usd"] == 30.0
     assert result["avg_pnl_percent"] == 15.0
+
+
+def test_format_daily_summary_includes_open_and_closed_counts(conn):
+    open_trade(conn, "addr1", "SYM", entry_price=1.0, entry_score=60, entry_risk_level="MITTEL")
+    open_trade(conn, "addr2", "SYM2", entry_price=1.0, entry_score=70, entry_risk_level="NIEDRIG")
+    trade = open_trades(conn)[0]
+    close_trade(conn, trade.id, exit_price=2.0, exit_reason="TAKE_PROFIT", trade_size_usd=100.0)
+
+    text = format_daily_summary(conn)
+
+    assert "Offene Positionen: 1" in text
+    assert "Geschlossene Positionen: 1" in text
+    assert "Win-Rate: 100%" in text
+
+
+@patch("paper_trading.send_telegram_message")
+def test_maybe_send_daily_summary_sends_once_per_day(mock_send, conn):
+    now = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+
+    sent_first = maybe_send_daily_summary(conn, now=now)
+    sent_second = maybe_send_daily_summary(conn, now=now)
+
+    assert sent_first is True
+    assert sent_second is False
+    mock_send.assert_called_once()
+
+
+@patch("paper_trading.send_telegram_message")
+def test_maybe_send_daily_summary_sends_again_on_a_new_day(mock_send, conn):
+    day1 = datetime(2026, 9, 10, 23, 0, tzinfo=timezone.utc)
+    day2 = datetime(2026, 9, 11, 0, 5, tzinfo=timezone.utc)
+
+    maybe_send_daily_summary(conn, now=day1)
+    sent_again = maybe_send_daily_summary(conn, now=day2)
+
+    assert sent_again is True
+    assert mock_send.call_count == 2
+
+
+@patch("paper_trading.send_telegram_message", side_effect=TelegramError("boom"))
+def test_maybe_send_daily_summary_retries_after_a_failed_send(mock_send, conn):
+    now = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+
+    sent = maybe_send_daily_summary(conn, now=now)
+
+    assert sent is False
+    # kein Datum vermerkt -> naechster Scan versucht es erneut
+    sent_retry = maybe_send_daily_summary(conn, now=now)
+    assert sent_retry is False
+    assert mock_send.call_count == 2

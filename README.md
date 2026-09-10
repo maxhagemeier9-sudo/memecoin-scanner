@@ -29,7 +29,7 @@ Seit 2026-09-10 (Birdeye-Compute-Units-Kontingent bis 2026-10-08 erschöpft):
 | `risk_scan.py` | Orchestrierung: scannt, bewertet, rankt, zeigt Top N |
 | `history.py` | Lokale SQLite-Historie - Grundlage für Trend-/Creator-Signale, Backtesting, Paper Trading |
 | `backtest.py` | Vergleicht Score bei Erstsichtung mit echter Kursentwicklung (OHLCV) |
-| `paper_trading.py` | Simuliert Trades anhand der eigenen Signale, protokolliert P&L |
+| `paper_trading.py` | Simuliert Trades anhand der eigenen Signale, protokolliert P&L, schickt max. 1x/Tag einen Performance-Report per Telegram |
 | `alerts.py` / `telegram_alerts.py` | Alert-Versand (Beep + Telegram) |
 | `monitor.py` | Dauerlauf-Modus (lokal), eröffnet/schließt Paper-Trades |
 | `ci_scan.py` | Einzelner Scan-Zyklus für zeitgesteuerte Trigger (GitHub Actions) |
@@ -75,3 +75,8 @@ Benötigt Repository-Secrets (Settings → Secrets and variables → Actions):
 Die Historie-DB (`history.sqlite3`) wird zwischen den Läufen per `actions/cache` erhalten, damit
 Trend- und Creator-Signale sowie offene Paper-Trades auch über einzelne, unabhängige
 Workflow-Läufe hinweg funktionieren.
+
+Pro Scan-Zyklus eröffnet Paper Trading nur eine Position - für den am höchsten bewerteten
+Alert-Kandidaten (Score) des jeweiligen Laufs, nicht für jeden einzelnen Alert. Einmal pro
+UTC-Kalendertag verschickt `paper_trading.maybe_send_daily_summary()` zusätzlich einen kurzen
+Performance-Report (offene/geschlossene Positionen, Win-Rate, Ø P&L, Gesamt-P&L) an Telegram.

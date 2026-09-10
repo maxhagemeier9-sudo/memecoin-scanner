@@ -130,6 +130,8 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
             f"(Einstieg ${trade.entry_price:.8f} -> Ausstieg ${exit_price:.8f}) ({trade.address})"
         )
 
+    paper_trading.maybe_send_daily_summary(conn)
+
 
 def run_monitor(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
     # Ohne Terminal (z.B. Hintergrundprozess) puffert Python stdout komplett -

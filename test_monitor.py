@@ -326,6 +326,24 @@ def test_only_the_best_scoring_alert_opens_a_paper_trade(mock_scan, mock_alert, 
         conn.close()
 
 
+@patch("monitor.paper_trading.maybe_send_daily_summary")
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_scan_once_triggers_the_daily_paper_trading_summary(
+    mock_scan, mock_alert, mock_recheck, mock_send, mock_daily_summary
+):
+    mock_scan.return_value = []
+    mock_recheck.return_value = []
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=MagicMock(), conn=conn)
+        mock_daily_summary.assert_called_once_with(conn)
+    finally:
+        conn.close()
+
+
 @patch("monitor.send_telegram_message")
 @patch("monitor.recheck_watchlist")
 @patch("monitor.alert")

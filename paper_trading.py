@@ -25,6 +25,7 @@ from config import (
     PAPER_TRADE_SIZE_USD,
 )
 from geckoterminal_client import GeckoTerminalAPIError, GeckoTerminalClient
+from telegram_alerts import TelegramError, send_telegram_message
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS paper_trades (
@@ -44,6 +45,11 @@ CREATE TABLE IF NOT EXISTS paper_trades (
 );
 CREATE INDEX IF NOT EXISTS idx_paper_trades_address ON paper_trades(address);
 CREATE INDEX IF NOT EXISTS idx_paper_trades_status ON paper_trades(status);
+
+CREATE TABLE IF NOT EXISTS paper_trading_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 _ROW_COLUMNS = (
@@ -187,6 +193,62 @@ def summarize(trades: list[PaperTrade]) -> dict:
         "total_pnl_usd": sum(t.pnl_usd or 0 for t in trades),
         "avg_pnl_percent": sum(t.pnl_percent or 0 for t in trades) / len(trades),
     }
+
+
+def _get_meta(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM paper_trading_meta WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO paper_trading_meta (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+    conn.commit()
+
+
+def format_daily_summary(conn: sqlite3.Connection) -> str:
+    open_ = open_trades(conn)
+    closed = closed_trades(conn)
+    summary = summarize(closed)
+
+    lines = [
+        "📊 Paper-Trading-Tagesreport",
+        f"Offene Positionen: {len(open_)}",
+        f"Geschlossene Positionen: {summary['count']}",
+    ]
+    if summary["count"] > 0:
+        lines.append(f"Win-Rate: {summary['win_rate_percent']:.0f}%")
+        lines.append(f"Ø P&L: {summary['avg_pnl_percent']:+.1f}%")
+        lines.append(f"Gesamt-P&L (bei je ${PAPER_TRADE_SIZE_USD:.0f} pro Trade): ${summary['total_pnl_usd']:+.2f}")
+    return "\n".join(lines)
+
+
+_DAILY_SUMMARY_META_KEY = "last_daily_summary_date"
+
+
+def maybe_send_daily_summary(conn: sqlite3.Connection, now: datetime | None = None) -> bool:
+    """Schickt höchstens einmal pro UTC-Kalendertag eine Performance-Übersicht
+    an Telegram, damit es bei einem 10-Minuten-Scan-Intervall nicht spammt.
+    Der Zeitpunkt innerhalb des Tages ist bewusst egal (einfach beim ersten
+    Scan nach Tageswechsel) - Datum wird erst nach erfolgreichem Versand
+    vermerkt, damit ein fehlgeschlagener Versand beim nächsten Scan
+    automatisch erneut versucht wird. Gibt zurück, ob tatsächlich gesendet
+    wurde (nützlich für Tests und CI-Logs)."""
+    today = (now or datetime.now(timezone.utc)).date().isoformat()
+    if _get_meta(conn, _DAILY_SUMMARY_META_KEY) == today:
+        return False
+
+    try:
+        send_telegram_message(format_daily_summary(conn))
+    except TelegramError as exc:
+        print(f"   (Paper-Trading-Tagesreport fehlgeschlagen: {exc})")
+        return False
+
+    _set_meta(conn, _DAILY_SUMMARY_META_KEY, today)
+    return True
 
 
 def _print_report(conn: sqlite3.Connection) -> None:
