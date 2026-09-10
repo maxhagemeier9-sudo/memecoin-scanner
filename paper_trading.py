@@ -228,16 +228,28 @@ def format_daily_summary(conn: sqlite3.Connection) -> str:
 
 _DAILY_SUMMARY_META_KEY = "last_daily_summary_date"
 
+# Nur in dieser UTC-Stunde überhaupt versuchen (statt bei jedem 10-Minuten-
+# Scan): begrenzt Retries bei einem fehlgeschlagenen Versand (z.B. Telegram-
+# Rate-Limit HTTP 429) auf maximal ~6 Versuche/Tag statt ~144, und stellt
+# sicher, dass ein einzelner fehlgeschlagener Tag nicht bis Mitternacht mit
+# Versuchen weitermacht.
+_DAILY_SUMMARY_HOUR_UTC = 8
+
 
 def maybe_send_daily_summary(conn: sqlite3.Connection, now: datetime | None = None) -> bool:
     """Schickt höchstens einmal pro UTC-Kalendertag eine Performance-Übersicht
-    an Telegram, damit es bei einem 10-Minuten-Scan-Intervall nicht spammt.
-    Der Zeitpunkt innerhalb des Tages ist bewusst egal (einfach beim ersten
-    Scan nach Tageswechsel) - Datum wird erst nach erfolgreichem Versand
-    vermerkt, damit ein fehlgeschlagener Versand beim nächsten Scan
-    automatisch erneut versucht wird. Gibt zurück, ob tatsächlich gesendet
-    wurde (nützlich für Tests und CI-Logs)."""
-    today = (now or datetime.now(timezone.utc)).date().isoformat()
+    an Telegram, damit es bei einem 10-Minuten-Scan-Intervall nicht spammt -
+    zusätzlich begrenzt auf ein festes Stunden-Fenster (_DAILY_SUMMARY_HOUR_UTC),
+    damit ein fehlgeschlagener Versand (z.B. Telegram-Rate-Limit) nicht bei
+    jedem Scan den ganzen Tag über erneut versucht wird. Datum wird erst nach
+    erfolgreichem Versand vermerkt, damit innerhalb des Stunden-Fensters bei
+    einem Fehlschlag der nächste Scan es automatisch erneut versucht. Gibt
+    zurück, ob tatsächlich gesendet wurde (nützlich für Tests und CI-Logs)."""
+    reference_now = now or datetime.now(timezone.utc)
+    if reference_now.hour != _DAILY_SUMMARY_HOUR_UTC:
+        return False
+
+    today = reference_now.date().isoformat()
     if _get_meta(conn, _DAILY_SUMMARY_META_KEY) == today:
         return False
 

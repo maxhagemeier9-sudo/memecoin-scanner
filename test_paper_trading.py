@@ -181,7 +181,7 @@ def test_format_daily_summary_includes_open_and_closed_counts(conn):
 
 @patch("paper_trading.send_telegram_message")
 def test_maybe_send_daily_summary_sends_once_per_day(mock_send, conn):
-    now = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)  # innerhalb des Stunden-Fensters
 
     sent_first = maybe_send_daily_summary(conn, now=now)
     sent_second = maybe_send_daily_summary(conn, now=now)
@@ -192,9 +192,19 @@ def test_maybe_send_daily_summary_sends_once_per_day(mock_send, conn):
 
 
 @patch("paper_trading.send_telegram_message")
+def test_maybe_send_daily_summary_skips_outside_the_hour_window(mock_send, conn):
+    outside_window = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+
+    sent = maybe_send_daily_summary(conn, now=outside_window)
+
+    assert sent is False
+    mock_send.assert_not_called()
+
+
+@patch("paper_trading.send_telegram_message")
 def test_maybe_send_daily_summary_sends_again_on_a_new_day(mock_send, conn):
-    day1 = datetime(2026, 9, 10, 23, 0, tzinfo=timezone.utc)
-    day2 = datetime(2026, 9, 11, 0, 5, tzinfo=timezone.utc)
+    day1 = datetime(2026, 9, 10, 8, 5, tzinfo=timezone.utc)
+    day2 = datetime(2026, 9, 11, 8, 5, tzinfo=timezone.utc)
 
     maybe_send_daily_summary(conn, now=day1)
     sent_again = maybe_send_daily_summary(conn, now=day2)
@@ -205,12 +215,12 @@ def test_maybe_send_daily_summary_sends_again_on_a_new_day(mock_send, conn):
 
 @patch("paper_trading.send_telegram_message", side_effect=TelegramError("boom"))
 def test_maybe_send_daily_summary_retries_after_a_failed_send(mock_send, conn):
-    now = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)
 
     sent = maybe_send_daily_summary(conn, now=now)
 
     assert sent is False
-    # kein Datum vermerkt -> naechster Scan versucht es erneut
+    # kein Datum vermerkt -> naechster Scan (noch im selben Stunden-Fenster) versucht es erneut
     sent_retry = maybe_send_daily_summary(conn, now=now)
     assert sent_retry is False
     assert mock_send.call_count == 2
