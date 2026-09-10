@@ -20,6 +20,7 @@ from __future__ import annotations
 import sqlite3
 import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -68,41 +69,47 @@ def assess_token(
     transfer_fee_bps = None
     update_authority = None
 
-    try:
-        authorities = get_mint_authorities(address)
-        findings += evaluate_authorities(authorities.mint_authority, authorities.freeze_authority)
-        findings += evaluate_token_extensions(authorities.extensions, authorities.transfer_fee_basis_points)
-        transfer_fee_bps = authorities.transfer_fee_basis_points
-        update_authority = authorities.update_authority
-    except SolanaRPCError as exc:
-        unchecked.append(f"Mint-/Freeze-Authority/Extensions nicht prüfbar ({exc})")
+    # Solana-RPC ist ein komplett anderer Dienst mit eigenem Rate-Limit als
+    # Birdeye - läuft parallel im Hintergrund, während wir sequenziell die
+    # gedrosselten Birdeye-Calls machen, statt seine Latenz on top draufzuschlagen.
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        authorities_future = executor.submit(get_mint_authorities, address)
 
-    try:
-        holder_data = client.get_holders(address, limit=1)
-        top10_percent = holder_data.get("top10_hold_percent")
-        holder_count = holder_data.get("holder")
-        findings += evaluate_holder_concentration(top10_percent, holder_count)
-    except BirdeyeAPIError as exc:
-        unchecked.append(f"Holder-Konzentration nicht prüfbar ({exc})")
+        try:
+            holder_data = client.get_holders(address, limit=1)
+            top10_percent = holder_data.get("top10_hold_percent")
+            holder_count = holder_data.get("holder")
+            findings += evaluate_holder_concentration(top10_percent, holder_count)
+        except BirdeyeAPIError as exc:
+            unchecked.append(f"Holder-Konzentration nicht prüfbar ({exc})")
 
-    time.sleep(RISK_SCAN_THROTTLE_SECONDS)
-
-    try:
-        market_data = client.get_market_data(address)
         time.sleep(RISK_SCAN_THROTTLE_SECONDS)
-        trade_data = client.get_trade_data(address)
-        liquidity_usd = market_data.get("liquidity") or 0
-        volume_24h_usd = trade_data.get("volume_24h_usd") or 0
-        trade_24h = trade_data.get("trade_24h") or 0
-        unique_wallet_24h = trade_data.get("unique_wallet_24h") or 0
-        findings += evaluate_liquidity_and_trading(
-            liquidity_usd=liquidity_usd,
-            volume_24h_usd=volume_24h_usd,
-            trade_24h=trade_24h,
-            unique_wallet_24h=unique_wallet_24h,
-        )
-    except BirdeyeAPIError as exc:
-        unchecked.append(f"Liquiditäts-/Handelsdaten nicht prüfbar ({exc})")
+
+        try:
+            market_data = client.get_market_data(address)
+            time.sleep(RISK_SCAN_THROTTLE_SECONDS)
+            trade_data = client.get_trade_data(address)
+            liquidity_usd = market_data.get("liquidity") or 0
+            volume_24h_usd = trade_data.get("volume_24h_usd") or 0
+            trade_24h = trade_data.get("trade_24h") or 0
+            unique_wallet_24h = trade_data.get("unique_wallet_24h") or 0
+            findings += evaluate_liquidity_and_trading(
+                liquidity_usd=liquidity_usd,
+                volume_24h_usd=volume_24h_usd,
+                trade_24h=trade_24h,
+                unique_wallet_24h=unique_wallet_24h,
+            )
+        except BirdeyeAPIError as exc:
+            unchecked.append(f"Liquiditäts-/Handelsdaten nicht prüfbar ({exc})")
+
+        try:
+            authorities = authorities_future.result()
+            findings += evaluate_authorities(authorities.mint_authority, authorities.freeze_authority)
+            findings += evaluate_token_extensions(authorities.extensions, authorities.transfer_fee_basis_points)
+            transfer_fee_bps = authorities.transfer_fee_basis_points
+            update_authority = authorities.update_authority
+        except SolanaRPCError as exc:
+            unchecked.append(f"Mint-/Freeze-Authority/Extensions nicht prüfbar ({exc})")
 
     if conn is not None:
         previous = history.previous_snapshot(conn, address)
