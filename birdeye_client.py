@@ -82,8 +82,8 @@ class BirdeyeClient:
         data = self._get("/defi/price", {"address": address})
         return data.get("data", {})
 
-    def get_new_listings(self, limit: int = 20) -> list[dict[str, Any]]:
-        data = self._get("/defi/v2/tokens/new_listing", {"limit": limit})
+    def get_new_listings(self, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
+        data = self._get("/defi/v2/tokens/new_listing", {"limit": limit, "offset": offset})
         return data.get("data", {}).get("items", [])
 
     def get_market_data(self, address: str) -> dict[str, Any]:

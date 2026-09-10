@@ -2,14 +2,14 @@
 Birdeye-Client, Solana-RPC, Historie und den reinen Bewertungsfunktionen -
 alles gemockt, keine Live-Calls.
 """
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from birdeye_client import BirdeyeAPIError
 from history import Snapshot, connect, record_snapshot
 from risk import Severity
-from risk_scan import assess_token
+from risk_scan import _listing_label, assess_token, scan_new_coins
 from solana_rpc import MintAuthorities, SolanaRPCError
 
 
@@ -138,3 +138,33 @@ def test_assess_token_records_a_new_snapshot_when_conn_given(mock_authorities):
         assert row[0] == 1
     finally:
         conn.close()
+
+
+def test_listing_label_prefers_symbol_over_name():
+    assert _listing_label({"symbol": "ABC", "name": "Abc Coin"}) == "ABC"
+
+
+def test_listing_label_falls_back_to_name_when_symbol_missing():
+    assert _listing_label({"symbol": None, "name": "Abc Coin"}) == "Abc Coin"
+
+
+def test_listing_label_falls_back_to_placeholder_when_both_missing():
+    assert _listing_label({"symbol": None, "name": None}) == "???"
+
+
+@patch("risk_scan.get_mint_authorities")
+def test_scan_new_coins_paginates_across_multiple_pages(mock_authorities):
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None)
+    client = _client()
+
+    page_1 = [{"address": f"addr-{i}", "symbol": f"C{i}", "liquidityAddedAt": "2026-09-09T00:00:00"} for i in range(20)]
+    page_2 = [{"address": f"addr-{i}", "symbol": f"C{i}", "liquidityAddedAt": "2026-09-09T00:00:00"} for i in range(20, 40)]
+    client.get_new_listings.side_effect = [page_1, page_2]
+
+    results = scan_new_coins(client, limit=20, pages=2)
+
+    assert len(results) == 40
+    assert client.get_new_listings.call_args_list == [
+        call(limit=20, offset=0),
+        call(limit=20, offset=20),
+    ]

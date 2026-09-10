@@ -1,6 +1,6 @@
 """Dauerlauf-Modus: scannt in Intervallen neue Coins und alarmiert, sobald
-ein Coin die Score-Schwelle überschreitet - ohne dieselbe Adresse mehrfach
-zu melden. Beenden mit Strg+C.
+ein Coin auffällig gut aussieht (siehe _should_alert) - ohne dieselbe Adresse
+mehrfach zu melden. Beenden mit Strg+C.
 
 Nutzt dieselbe Historie-DB wie risk_scan.py, dadurch profitieren auch die
 Trend-/Creator-Signale (evaluate_liquidity_trend, evaluate_creator_history)
@@ -17,13 +17,25 @@ import history
 from alerts import alert
 from birdeye_client import BirdeyeAPIError, BirdeyeClient
 from config import MONITOR_ALERT_SCORE_THRESHOLD, MONITOR_INTERVAL_SECONDS
-from risk_scan import _print_ranking, format_telegram_summary, scan_new_coins
+from risk import Severity
+from risk_scan import TokenAssessment, _print_ranking, format_telegram_summary, scan_new_coins
 from telegram_alerts import TelegramError, send_telegram_message
+
+
+def _should_alert(assessment: TokenAssessment) -> bool:
+    """Alarmiert entweder bei hohem Score ODER bei höchstens mittlerem Risiko,
+    unabhängig vom genauen Score. Reine Score>=70-Coins sind bei ganz frischen
+    Listings selten, weil Holder-Konzentration direkt nach dem Launch fast
+    immer schlecht aussieht (kaum jemand hat schon gekauft) - ein Coin ohne
+    HOCH/KRITISCH-Finding ist trotzdem ein brauchbares Signal, auch mit
+    Score < 70.
+    """
+    return assessment.score.total >= MONITOR_ALERT_SCORE_THRESHOLD or assessment.report.overall <= Severity.MITTEL
 
 
 def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
     """Ein Scan-Zyklus: scannen, anzeigen, Zusammenfassung an Telegram
-    schicken, neue Score-Schwellen-Überschreitungen zusätzlich alarmieren.
+    schicken, neue auffällige Coins (siehe _should_alert) zusätzlich alarmieren.
     Getrennt von der Endlosschleife, damit es isoliert testbar ist.
 
     Die Alert-Deduplizierung läuft über die Historie-DB (history.has_been_alerted)
@@ -43,8 +55,11 @@ def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
         address = listing["address"]
         if history.has_been_alerted(conn, address):
             continue
-        if assessment.score.total >= MONITOR_ALERT_SCORE_THRESHOLD:
-            alert(f"{assessment.report.symbol} erreicht Score {assessment.score.total}/100 ({address})")
+        if _should_alert(assessment):
+            alert(
+                f"{assessment.report.symbol} - Score {assessment.score.total}/100, "
+                f"Risiko {assessment.report.overall.name} ({address})"
+            )
             history.mark_alerted(conn, address)
 
 
@@ -57,7 +72,7 @@ def run_monitor(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
 
     print(
         f"Monitor gestartet - Intervall {MONITOR_INTERVAL_SECONDS}s, "
-        f"Alert-Schwelle Score >= {MONITOR_ALERT_SCORE_THRESHOLD}"
+        f"Alert bei Score >= {MONITOR_ALERT_SCORE_THRESHOLD} oder Risiko <= MITTEL"
     )
     print("Beenden mit Strg+C\n")
 

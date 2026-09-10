@@ -27,7 +27,13 @@ from datetime import datetime, timezone
 
 import history
 from birdeye_client import BirdeyeAPIError, BirdeyeClient
-from config import EXPORT_RESULTS, RANKING_SCAN_LIMIT, RANKING_TOP_N, RISK_SCAN_THROTTLE_SECONDS
+from config import (
+    EXPORT_RESULTS,
+    RANKING_SCAN_LIMIT,
+    RANKING_SCAN_PAGES,
+    RANKING_TOP_N,
+    RISK_SCAN_THROTTLE_SECONDS,
+)
 from export import export_ranking
 from new_coins import age_minutes, format_age
 from risk import (
@@ -154,16 +160,27 @@ def assess_token(
     return TokenAssessment(report=report, score=score, liquidity_usd=liquidity_usd)
 
 
+def _listing_label(listing: dict) -> str:
+    """Symbol, sonst Name, sonst "???" - Birdeye liefert für ganz frisch
+    indizierte Coins teils beides als null zurück (echte Datenlücke, kein Bug)."""
+    return listing.get("symbol") or listing.get("name") or "???"
+
+
 def scan_new_coins(
     client: BirdeyeClient,
     limit: int = RANKING_SCAN_LIMIT,
+    pages: int = RANKING_SCAN_PAGES,
     conn: sqlite3.Connection | None = None,
 ) -> list[tuple[dict, TokenAssessment]]:
-    listings = client.get_new_listings(limit=limit)
-    results = []
+    listings = []
+    for page in range(pages):
+        listings += client.get_new_listings(limit=limit, offset=page * limit)
+        if page < pages - 1:
+            time.sleep(RISK_SCAN_THROTTLE_SECONDS)
 
+    results = []
     for listing in listings:
-        assessment = assess_token(client, listing["address"], listing.get("symbol") or "???", conn=conn)
+        assessment = assess_token(client, listing["address"], _listing_label(listing), conn=conn)
         results.append((listing, assessment))
         time.sleep(RISK_SCAN_THROTTLE_SECONDS)
 

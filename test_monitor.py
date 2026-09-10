@@ -4,14 +4,15 @@ from unittest.mock import patch
 
 from history import connect, has_been_alerted, mark_alerted
 from monitor import scan_once
-from risk import build_report
+from risk import RiskFinding, Severity, build_report
 from risk_scan import TokenAssessment
 from score import Score
 from telegram_alerts import TelegramError
 
 
-def _result(symbol, address, score_total):
-    report = build_report(address, symbol, [], [])
+def _result(symbol, address, score_total, findings=None):
+    findings = findings or []
+    report = build_report(address, symbol, findings, [])
     score = Score(total=score_total, capped=False, breakdown=[])
     listing = {"address": address, "symbol": symbol, "liquidityAddedAt": "2026-09-09T00:00:00"}
     return listing, TokenAssessment(report=report, score=score, liquidity_usd=1_000)
@@ -20,7 +21,7 @@ def _result(symbol, address, score_total):
 @patch("monitor.send_telegram_message")
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
-def test_coin_above_threshold_triggers_alert(mock_scan, mock_alert, mock_send):
+def test_high_score_triggers_alert(mock_scan, mock_alert, mock_send):
     mock_scan.return_value = [_result("HOT", "addr1", 85)]
     conn = connect(db_path=":memory:")
     try:
@@ -34,12 +35,54 @@ def test_coin_above_threshold_triggers_alert(mock_scan, mock_alert, mock_send):
 @patch("monitor.send_telegram_message")
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
-def test_coin_below_threshold_does_not_alert(mock_scan, mock_alert, mock_send):
-    mock_scan.return_value = [_result("MEH", "addr1", 30)]
+def test_low_score_and_high_risk_does_not_alert(mock_scan, mock_alert, mock_send):
+    findings = [RiskFinding(Severity.HOCH, "Sehr geringe Liquidität")]
+    mock_scan.return_value = [_result("MEH", "addr1", 30, findings=findings)]
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
         mock_alert.assert_not_called()
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_kritisch_risk_with_capped_low_score_does_not_alert(mock_scan, mock_alert, mock_send):
+    findings = [RiskFinding(Severity.KRITISCH, "Mint-Authority aktiv")]
+    mock_scan.return_value = [_result("BAD", "addr1", 10, findings=findings)]
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        mock_alert.assert_not_called()
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_mittel_risk_alerts_even_with_low_score(mock_scan, mock_alert, mock_send):
+    findings = [RiskFinding(Severity.MITTEL, "Nur 40 Holder insgesamt")]
+    mock_scan.return_value = [_result("MID", "addr1", 45, findings=findings)]  # Score < 70
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        mock_alert.assert_called_once()
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_niedrig_risk_alerts_even_with_low_score(mock_scan, mock_alert, mock_send):
+    mock_scan.return_value = [_result("SAFE", "addr1", 20)]  # keine Findings -> NIEDRIG
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        mock_alert.assert_called_once()
     finally:
         conn.close()
 

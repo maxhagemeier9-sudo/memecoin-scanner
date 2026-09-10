@@ -66,8 +66,11 @@ DEFAULT_RISK_THRESHOLDS = RiskThresholds()
 SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
 
 # Der Risk-Scan macht 3 Birdeye- + 1 Solana-RPC-Call pro Coin. 20 ist das
-# Maximum, das der new_listing-Endpoint pro Aufruf erlaubt (HTTP 400 darüber).
+# Maximum, das der new_listing-Endpoint pro Aufruf erlaubt (HTTP 400 darüber) -
+# per offset paginiert (siehe scan_new_coins in risk_scan.py), um mehr als
+# nur die letzten 20 Coins abzudecken ("Spektrum erweitern").
 RANKING_SCAN_LIMIT = 20
+RANKING_SCAN_PAGES = 2  # 2 Seiten x 20 = 40 Coins pro Lauf
 RISK_SCAN_THROTTLE_SECONDS = 0.5
 
 # Wie viele Coins im Ranking angezeigt werden (sinnvoller Bereich laut

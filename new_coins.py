@@ -70,7 +70,7 @@ def fetch_new_coins(
         results.append(
             NewCoinInfo(
                 address=address,
-                symbol=listing.get("symbol") or "???",
+                symbol=listing.get("symbol") or listing.get("name") or "???",
                 name=listing.get("name") or "Unknown",
                 liquidity_usd=market_data.get("liquidity") or listing.get("liquidity") or 0,
                 volume_24h_usd=trade_data.get("volume_24h_usd") or 0,
