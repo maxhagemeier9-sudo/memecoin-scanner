@@ -365,6 +365,41 @@ def test_open_paper_trade_gets_closed_and_alerted_on_take_profit(mock_scan, mock
         closed = paper_trading.closed_trades(conn)
         assert len(closed) == 1
         assert closed[0].exit_reason == "TAKE_PROFIT"
-        assert any("Paper-Trade" in call.args[0] for call in mock_alert.call_args_list)
+        assert any("Paper-Trade" in call.args[0] for call in mock_send.call_args_list)
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_many_closed_paper_trades_send_only_a_single_telegram_message(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = []
+    mock_recheck.return_value = []
+    conn = connect(db_path=":memory:")
+    try:
+        paper_trading.ensure_schema(conn)
+        for i in range(25):
+            paper_trading.open_trade(
+                conn, f"addr{i}", f"SYM{i}", entry_price=1.0, entry_score=60, entry_risk_level="MITTEL"
+            )
+
+        client = MagicMock()
+        client.get_token_price.return_value = 2.5  # +150% -> Take-Profit fuer alle 25
+
+        # Telegram-Zusammenfassung + Paper-Trade-Report sind bereits gemockt (mock_send);
+        # zaehlen, wie oft send_telegram_message NACH den 25 Schliessungen noch fuer die
+        # Trade-Closures aufgerufen wird - erwartet genau EIN zusaetzlicher Aufruf.
+        calls_before = mock_send.call_count
+        scan_once(client=client, conn=conn)
+
+        assert len(paper_trading.closed_trades(conn)) == 25
+        closure_calls = [
+            call for call in mock_send.call_args_list[calls_before:]
+            if "Paper-Trade" in call.args[0] and "geschlossen" in call.args[0]
+        ]
+        assert len(closure_calls) == 1
+        assert "25 Paper-Trade(s) geschlossen" in closure_calls[0].args[0]
     finally:
         conn.close()

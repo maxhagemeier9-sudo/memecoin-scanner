@@ -53,6 +53,21 @@ def _maybe_open_paper_trade(conn: sqlite3.Connection, assessment: TokenAssessmen
     )
 
 
+def _format_paper_trade_closures(closed: list[tuple]) -> str:
+    """Fasst alle in diesem Scan-Zyklus geschlossenen Paper-Trades in EINER
+    Nachricht zusammen, statt pro Trade einzeln zu alarmieren - bei vielen
+    gleichzeitig fälligen Positionen (z.B. nach einer längeren Pause oder
+    einem Backlog) sonst eine Telegram-Flut von Dutzenden Einzelnachrichten."""
+    lines = [f"📝 {len(closed)} Paper-Trade(s) geschlossen:"]
+    for trade, reason, exit_price in closed:
+        pnl_percent = (exit_price - trade.entry_price) / trade.entry_price * 100
+        lines.append(
+            f"{trade.symbol} - {reason}, {pnl_percent:+.0f}% "
+            f"(${trade.entry_price:.8f} -> ${exit_price:.8f}) ({trade.address})"
+        )
+    return "\n".join(lines)
+
+
 def _should_alert(assessment: TokenAssessment) -> bool:
     """Alarmiert entweder bei hohem Score ODER bei höchstens mittlerem Risiko,
     unabhängig vom genauen Score. Reine Score>=70-Coins sind bei ganz frischen
@@ -123,12 +138,14 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
     if best_candidate is not None:
         _maybe_open_paper_trade(conn, best_candidate)
 
-    for trade, reason, exit_price in paper_trading.process_open_trades(client, conn):
-        pnl_percent = (exit_price - trade.entry_price) / trade.entry_price * 100
-        alert(
-            f"📝 Paper-Trade geschlossen: {trade.symbol} - {reason}, {pnl_percent:+.0f}% "
-            f"(Einstieg ${trade.entry_price:.8f} -> Ausstieg ${exit_price:.8f}) ({trade.address})"
-        )
+    closed_paper_trades = paper_trading.process_open_trades(client, conn)
+    if closed_paper_trades:
+        for trade, reason, exit_price in closed_paper_trades:
+            print(f"   Paper-Trade geschlossen: {trade.symbol} - {reason} ({trade.address})")
+        try:
+            send_telegram_message(_format_paper_trade_closures(closed_paper_trades))
+        except TelegramError as exc:
+            print(f"   (Paper-Trade-Telegram fehlgeschlagen: {exc})")
 
     paper_trading.maybe_send_daily_summary(conn)
 
