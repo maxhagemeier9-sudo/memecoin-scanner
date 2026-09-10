@@ -1,15 +1,22 @@
 """Risk-Scanner: bewertet neu gelistete Solana-Coins auf offensichtliche
 Betrugs-/Gefahrensignale und verdichtet alles zu einem 0-100-Score.
 
-Kombiniert:
-- Mint-/Freeze-Authority und Token-2022-Extensions (TransferHook,
-  PermanentDelegate, NonTransferable, Transfer-Steuer) direkt per
-  Solana-RPC (solana_rpc.py) - der Birdeye-Security-Endpoint dafür ist mit
-  dem aktuellen Plan gesperrt (401).
-- Holder-Konzentration und Liquiditäts-/Handelsdaten von Birdeye.
+Datenquellen seit 2026-09-10 (Birdeye-Compute-Units-Kontingent bis
+2026-10-08 erschöpft, siehe birdeye_client.py):
+- GeckoTerminal/CoinGecko On-Chain API (geckoterminal_client.py, keyless,
+  kostenlos): Discovery neuer Pools sowie Preis/Liquidität/Volumen/
+  Handelszahlen - alles in EINEM Call pro Discovery-Seite (20 Coins), statt
+  vorher 3 Birdeye-Calls PRO Coin.
+- Helius-RPC (solana_rpc.py, config.SOLANA_RPC_URL): Mint-/Freeze-Authority,
+  Token-2022-Extensions, und Holder-Konzentration (aus
+  getTokenLargestAccounts + Supply, da GeckoTerminals Holder-Endpunkte im
+  Gratis-Tier gesperrt sind - live verifiziert, HTTP 401/429).
 - Lokale Historie (history.py): Liquiditäts-Trend seit dem letzten Scan
   derselben Adresse und wie viele andere Coins dieselbe Creator-Wallet
   bereits gelistet hat ("Serial-Launcher"-Signal).
+
+WICHTIG: holder_count (Gesamtzahl aller Holder, nicht nur Top-10) ist seit
+dem Wechsel nicht mehr verfügbar - siehe config.ScoreWeights-Docstring.
 
 Siehe risk.py für die genauen Risk-Kriterien und deren bewusste Grenzen
 (u.a. KEINE Prüfung von Liquiditäts-Sperren/-Burns oder Contract-Logik) und
@@ -21,16 +28,13 @@ import html
 import sqlite3
 import time
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import history
-from birdeye_client import BirdeyeAPIError, BirdeyeClient
 from config import (
     DEFAULT_RISK_THRESHOLDS,
     EXPORT_RESULTS,
-    RANKING_SCAN_LIMIT,
     RANKING_SCAN_PAGES,
     RANKING_TOP_N,
     RISING_STAR_RECHECK_LIMIT,
@@ -38,6 +42,7 @@ from config import (
     RiskThresholds,
 )
 from export import export_ranking
+from geckoterminal_client import GeckoTerminalAPIError, GeckoTerminalClient, PoolListing, parse_pool
 from new_coins import age_minutes, format_age
 from risk import (
     RiskReport,
@@ -51,7 +56,7 @@ from risk import (
     evaluate_token_extensions,
 )
 from score import Score, compute_score
-from solana_rpc import SolanaRPCError, get_mint_authorities
+from solana_rpc import SolanaRPCError, get_mint_authorities, get_top10_concentration
 
 
 @dataclass(frozen=True)
@@ -60,72 +65,48 @@ class TokenAssessment:
     score: Score
     liquidity_usd: float | None
     price: float | None = None
+    pool_address: str | None = None
 
 
-def assess_token(
-    client: BirdeyeClient,
-    address: str,
-    symbol: str,
-    conn: sqlite3.Connection | None = None,
-) -> TokenAssessment:
+def assess_listing(listing: PoolListing, conn: sqlite3.Connection | None = None) -> TokenAssessment:
+    """Bewertet einen bereits von GeckoTerminal abgerufenen Pool-Eintrag.
+    Braucht nur noch 2 zusätzliche RPC-Calls (Authorities+Supply, danach
+    Top10-Konzentration) - Preis/Liquidität/Volumen/Handelszahlen stecken
+    schon in `listing`.
+    """
     findings = []
     unchecked = []
 
     top10_percent = None
-    holder_count = None
-    liquidity_usd = None
-    price = None
-    volume_24h_usd = None
-    trade_24h = None
-    unique_wallet_24h = None
     transfer_fee_bps = None
     update_authority = None
 
-    # Solana-RPC ist ein komplett anderer Dienst mit eigenem Rate-Limit als
-    # Birdeye - läuft parallel im Hintergrund, während wir sequenziell die
-    # gedrosselten Birdeye-Calls machen, statt seine Latenz on top draufzuschlagen.
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        authorities_future = executor.submit(get_mint_authorities, address)
+    try:
+        authorities = get_mint_authorities(listing.token_address)
+        findings += evaluate_authorities(authorities.mint_authority, authorities.freeze_authority)
+        findings += evaluate_token_extensions(authorities.extensions, authorities.transfer_fee_basis_points)
+        transfer_fee_bps = authorities.transfer_fee_basis_points
+        update_authority = authorities.update_authority
 
         try:
-            holder_data = client.get_holders(address, limit=1)
-            top10_percent = holder_data.get("top10_hold_percent")
-            holder_count = holder_data.get("holder")
-            findings += evaluate_holder_concentration(top10_percent, holder_count)
-        except BirdeyeAPIError as exc:
-            unchecked.append(f"Holder-Konzentration nicht prüfbar ({exc})")
-
-        time.sleep(RISK_SCAN_THROTTLE_SECONDS)
-
-        try:
-            market_data = client.get_market_data(address)
-            time.sleep(RISK_SCAN_THROTTLE_SECONDS)
-            trade_data = client.get_trade_data(address)
-            liquidity_usd = market_data.get("liquidity") or 0
-            price = market_data.get("price")
-            volume_24h_usd = trade_data.get("volume_24h_usd") or 0
-            trade_24h = trade_data.get("trade_24h") or 0
-            unique_wallet_24h = trade_data.get("unique_wallet_24h") or 0
-            findings += evaluate_liquidity_and_trading(
-                liquidity_usd=liquidity_usd,
-                volume_24h_usd=volume_24h_usd,
-                trade_24h=trade_24h,
-                unique_wallet_24h=unique_wallet_24h,
-            )
-        except BirdeyeAPIError as exc:
-            unchecked.append(f"Liquiditäts-/Handelsdaten nicht prüfbar ({exc})")
-
-        try:
-            authorities = authorities_future.result()
-            findings += evaluate_authorities(authorities.mint_authority, authorities.freeze_authority)
-            findings += evaluate_token_extensions(authorities.extensions, authorities.transfer_fee_basis_points)
-            transfer_fee_bps = authorities.transfer_fee_basis_points
-            update_authority = authorities.update_authority
+            top10_percent = get_top10_concentration(listing.token_address, authorities.total_supply)
+            findings += evaluate_holder_concentration(top10_percent, None)
         except SolanaRPCError as exc:
-            unchecked.append(f"Mint-/Freeze-Authority/Extensions nicht prüfbar ({exc})")
+            unchecked.append(f"Holder-Konzentration nicht prüfbar ({exc})")
+    except SolanaRPCError as exc:
+        unchecked.append(f"Mint-/Freeze-Authority/Extensions/Holder-Konzentration nicht prüfbar ({exc})")
+
+    liquidity_usd = listing.liquidity_usd or 0
+    volume_24h_usd = listing.volume_24h_usd or 0
+    findings += evaluate_liquidity_and_trading(
+        liquidity_usd=liquidity_usd,
+        volume_24h_usd=volume_24h_usd,
+        trade_24h=listing.trade_24h,
+        unique_wallet_24h=listing.unique_wallet_24h,
+    )
 
     if conn is not None:
-        previous = history.previous_snapshot(conn, address)
+        previous = history.previous_snapshot(conn, listing.token_address)
         if previous is not None:
             previous_time = datetime.fromisoformat(previous.scanned_at)
             minutes_since_previous = (datetime.now(timezone.utc) - previous_time).total_seconds() / 60
@@ -133,62 +114,76 @@ def assess_token(
 
         if update_authority is not None:
             creator_coins = history.creator_history(conn, update_authority)
-            previous_coin_count = len({s.address for s in creator_coins if s.address != address})
+            previous_coin_count = len({s.address for s in creator_coins if s.address != listing.token_address})
             findings += evaluate_creator_history(previous_coin_count)
 
-    report = build_report(address, symbol, findings, unchecked)
+    report = build_report(listing.token_address, listing.symbol, findings, unchecked)
 
     score = compute_score(
         top10_percent=top10_percent,
-        holder_count=holder_count,
+        holder_count=None,
         liquidity_usd=liquidity_usd,
         volume_24h_usd=volume_24h_usd,
-        trade_24h=trade_24h,
-        unique_wallet_24h=unique_wallet_24h,
+        trade_24h=listing.trade_24h,
+        unique_wallet_24h=listing.unique_wallet_24h,
         transfer_fee_basis_points=transfer_fee_bps,
         has_critical_finding=report.overall == Severity.KRITISCH,
     )
 
     if conn is not None:
         history.record_snapshot(conn, history.Snapshot(
-            address=address,
-            symbol=symbol,
+            address=listing.token_address,
+            symbol=listing.symbol,
             scanned_at=datetime.now(timezone.utc).isoformat(),
             liquidity_usd=liquidity_usd,
             volume_24h_usd=volume_24h_usd,
-            holder_count=holder_count,
+            holder_count=None,
             top10_percent=top10_percent,
             score_total=score.total,
             risk_level=report.overall.name,
             creator_authority=update_authority,
-            price=price,
+            price=listing.price_usd,
+            pool_address=listing.pool_address,
         ))
 
-    return TokenAssessment(report=report, score=score, liquidity_usd=liquidity_usd, price=price)
-
-
-def _listing_label(listing: dict) -> str:
-    """Symbol, sonst Name, sonst "???" - Birdeye liefert für ganz frisch
-    indizierte Coins teils beides als null zurück (echte Datenlücke, kein Bug)."""
-    return listing.get("symbol") or listing.get("name") or "???"
+    return TokenAssessment(
+        report=report, score=score, liquidity_usd=liquidity_usd,
+        price=listing.price_usd, pool_address=listing.pool_address,
+    )
 
 
 def scan_new_coins(
-    client: BirdeyeClient,
-    limit: int = RANKING_SCAN_LIMIT,
+    client: GeckoTerminalClient,
     pages: int = RANKING_SCAN_PAGES,
     conn: sqlite3.Connection | None = None,
 ) -> list[tuple[dict, TokenAssessment]]:
-    listings = []
-    for page in range(pages):
-        listings += client.get_new_listings(limit=limit, offset=page * limit)
-        if page < pages - 1:
-            time.sleep(RISK_SCAN_THROTTLE_SECONDS)
+    """Gibt (listing_dict, TokenAssessment)-Paare zurück. `listing_dict` hat
+    dieselben Keys wie vorher ("address", "symbol", "liquidityAddedAt"),
+    damit _print_ranking/format_telegram_summary/monitor.py unverändert
+    bleiben. Dedupliziert nach Token-Adresse, falls derselbe Coin über
+    mehrere Pools/Seiten auftaucht.
+    """
+    pools = []
+    for page in range(1, pages + 1):
+        pools += client.get_new_pools(page=page)
+        client.throttle()
 
     results = []
-    for listing in listings:
-        assessment = assess_token(client, listing["address"], _listing_label(listing), conn=conn)
-        results.append((listing, assessment))
+    seen_tokens: set[str] = set()
+
+    for pool in pools:
+        listing = parse_pool(pool)
+        if listing is None or listing.token_address in seen_tokens:
+            continue
+        seen_tokens.add(listing.token_address)
+
+        assessment = assess_listing(listing, conn=conn)
+        listing_dict = {
+            "address": listing.token_address,
+            "symbol": listing.symbol,
+            "liquidityAddedAt": listing.created_at,
+        }
+        results.append((listing_dict, assessment))
         time.sleep(RISK_SCAN_THROTTLE_SECONDS)
 
     return results
@@ -216,25 +211,44 @@ def is_rising(
 
 
 def recheck_watchlist(
-    client: BirdeyeClient,
+    client: GeckoTerminalClient,
     conn: sqlite3.Connection,
     limit: int = RISING_STAR_RECHECK_LIMIT,
 ) -> list[tuple[history.Snapshot, TokenAssessment]]:
     """Prüft bereits bekannte, bisher unauffällige Coins (NIEDRIG/MITTEL-Risiko,
-    mind. 2 Snapshots) erneut direkt per Adresse nach - unabhängig davon, ob
-    sie noch in den neuesten new_listing-Einträgen auftauchen (die fallen
-    nach ca. 10-20 Min aus diesem Fenster raus, siehe scan_new_coins). Liefert
-    (erster Snapshot, aktuelle Bewertung) je Kandidat, Grundlage für
-    "Rising Coin"-Alerts (siehe is_rising, monitor.scan_once).
+    mind. 2 Snapshots) erneut per gespeicherter Pool-Adresse nach -
+    unabhängig davon, ob sie noch in den neuesten new_pools-Einträgen
+    auftauchen (die fallen nach ca. 10-20 Min aus diesem Fenster raus, siehe
+    scan_new_coins). Liefert (erster Snapshot, aktuelle Bewertung) je
+    Kandidat, Grundlage für "Rising Coin"-Alerts (siehe is_rising,
+    monitor.scan_once). Kandidaten ohne gespeicherte Pool-Adresse (ältere
+    Snapshots von vor diesem Feld) werden übersprungen.
     """
     candidates = history.watchlist_candidates(conn, limit=limit)
     results = []
 
     for candidate in candidates:
+        if not candidate.pool_address:
+            continue
+
+        try:
+            pool = client.get_pool(candidate.pool_address)
+        except GeckoTerminalAPIError:
+            continue
+        if pool is None:
+            continue
+
+        listing = parse_pool(pool)
+        if listing is None:
+            continue
+
         first = history.first_snapshot(conn, candidate.address)
-        assessment = assess_token(client, candidate.address, candidate.symbol, conn=conn)
+        if first is None:
+            continue
+
+        assessment = assess_listing(listing, conn=conn)
         results.append((first, assessment))
-        time.sleep(RISK_SCAN_THROTTLE_SECONDS)
+        client.throttle()
 
     return results
 
@@ -282,7 +296,7 @@ def format_telegram_summary(
 ) -> str:
     """Nachrichtentext für Telegram (HTML-parse_mode) - eine Zusammenfassung
     pro abgeschlossenem Scan, inkl. Adresse pro Coin zum direkten Kopieren.
-    Symbol wird HTML-escaped, weil Coin-Namen/Symbole aus der Birdeye-API
+    Symbol wird HTML-escaped, weil Coin-Namen/Symbole aus externen Quellen
     kommen und beliebige Zeichen enthalten können (z.B. "&", "<") - ohne
     Escaping würde das die Telegram-HTML-Parsing brechen oder Markup injizieren.
     """
@@ -337,11 +351,11 @@ def _print_ranking(results: list[tuple[dict, TokenAssessment]], top_n: int = RAN
 
 
 def main() -> None:
-    client = BirdeyeClient()
+    client = GeckoTerminalClient()
     conn = history.connect()
     try:
         results = scan_new_coins(client, conn=conn)
-    except BirdeyeAPIError as exc:
+    except GeckoTerminalAPIError as exc:
         print(f"Abruf fehlgeschlagen: {exc}")
         return
     finally:

@@ -15,9 +15,24 @@ def _get_required_env(name: str) -> str:
     return value
 
 
-BIRDEYE_API_KEY = _get_required_env("BIRDEYE_API_KEY")
+# Birdeye ist seit 2026-09-10 nicht mehr die primäre Datenquelle (Compute-
+# Units-Kontingent bis 2026-10-08 erschöpft) - deshalb hier optional statt
+# per _get_required_env. filters.py/scanner.py/new_coins.py nutzen weiterhin
+# Birdeye und funktionieren wieder, sobald das Kontingent zurückgesetzt ist.
+BIRDEYE_API_KEY = os.getenv("BIRDEYE_API_KEY")
 BIRDEYE_BASE_URL = "https://public-api.birdeye.so"
 DEFAULT_CHAIN = "solana"
+
+# Helius: kostenloser RPC/Compute-Endpoint, ersetzt api.mainnet-beta.solana.com
+# als primären Solana-RPC (bessere Rate-Limits, u.a. für getTokenLargestAccounts,
+# das der öffentliche RPC stark drosselt). Erfordert HELIUS_API_KEY in .env.
+HELIUS_API_KEY = _get_required_env("HELIUS_API_KEY")
+
+# GeckoTerminal/CoinGecko On-Chain API: komplett kostenlos, kein API-Key -
+# primäre Quelle für Discovery, Preis/Liquidität/Volumen und OHLCV.
+GECKOTERMINAL_BASE_URL = "https://api.geckoterminal.com/api/v2"
+# Free-Tier ist mit ca. 30 Calls/Min dokumentiert - konservativ gedrosselt.
+GECKOTERMINAL_THROTTLE_SECONDS = 1.5
 
 REQUEST_TIMEOUT_SECONDS = 15
 MAX_RETRIES = 3
@@ -41,7 +56,8 @@ NEW_COINS_THROTTLE_SECONDS = 0.4
 
 @dataclass(frozen=True)
 class RiskThresholds:
-    # Holder-Konzentration (top10_hold_percent von Birdeye)
+    # Holder-Konzentration (top10_percent, selbst berechnet aus Helius
+    # getTokenLargestAccounts + Supply, siehe solana_rpc.get_top10_concentration)
     top10_percent_high: float = 70.0
     top10_percent_medium: float = 50.0
     min_holder_count: int = 50
@@ -66,13 +82,10 @@ class RiskThresholds:
 
 DEFAULT_RISK_THRESHOLDS = RiskThresholds()
 
-SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
+SOLANA_RPC_URL = f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
 
-# Der Risk-Scan macht 3 Birdeye- + 1 Solana-RPC-Call pro Coin. 20 ist das
-# Maximum, das der new_listing-Endpoint pro Aufruf erlaubt (HTTP 400 darüber) -
-# per offset paginiert (siehe scan_new_coins in risk_scan.py), um mehr als
-# nur die letzten 20 Coins abzudecken ("Spektrum erweitern").
-RANKING_SCAN_LIMIT = 20
+# Wie viele Seiten der GeckoTerminal new_pools-Liste pro Lauf geholt werden
+# (20 Pools/Seite ist deren Standard-Seitengröße).
 RANKING_SCAN_PAGES = 2  # 2 Seiten x 20 = 40 Coins pro Lauf
 RISK_SCAN_THROTTLE_SECONDS = 0.5
 
@@ -83,10 +96,19 @@ RANKING_TOP_N = 10
 
 @dataclass(frozen=True)
 class ScoreWeights:
-    """Gewichtung der Score-Faktoren (0-100), muss in Summe 100 ergeben."""
-    holder_concentration: int = 25
-    liquidity: int = 20
-    holder_count: int = 15
+    """Gewichtung der Score-Faktoren (0-100), muss in Summe 100 ergeben.
+
+    holder_count auf 0 gesetzt: seit dem Wechsel von Birdeye auf
+    GeckoTerminal/Helius haben wir keine verlässliche Gesamt-Holder-Zahl
+    mehr (Helius' getTokenLargestAccounts liefert nur die Top-20-Accounts,
+    daraus lässt sich die Konzentration berechnen, aber nicht die
+    Gesamtzahl). Die 15 Punkte sind auf holder_concentration und liquidity
+    verteilt, die weiterhin zuverlässig verfügbar sind. Feld bewusst nicht
+    entfernt, falls wir später wieder eine Holder-Zahl-Quelle anbinden.
+    """
+    holder_concentration: int = 35
+    liquidity: int = 25
+    holder_count: int = 0
     volume_liquidity_ratio: int = 15
     wash_trading: int = 15
     transfer_fee: int = 10

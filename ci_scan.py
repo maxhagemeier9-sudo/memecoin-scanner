@@ -12,16 +12,16 @@ per actions/cache zwischen Läufen wiederherstellt).
 from __future__ import annotations
 
 import history
-from birdeye_client import BirdeyeAPIError, BirdeyeClient
+from geckoterminal_client import GeckoTerminalAPIError, GeckoTerminalClient
 from monitor import scan_once
 
 
 def main() -> None:
-    client = BirdeyeClient()
+    client = GeckoTerminalClient()
     conn = history.connect()
     try:
         scan_once(client, conn)
-    except BirdeyeAPIError as exc:
+    except GeckoTerminalAPIError as exc:
         print(f"Scan fehlgeschlagen: {exc}")
     finally:
         conn.close()

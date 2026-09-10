@@ -2,15 +2,18 @@
 from unittest.mock import MagicMock
 
 from backtest import backtest_snapshot, run_backtest, summarize_by_risk_level
-from birdeye_client import BirdeyeAPIError
+from geckoterminal_client import GeckoTerminalAPIError
 from history import Snapshot, connect, record_snapshot
 
 
-def _snapshot(address="addr1", price=1.0, risk_level="MITTEL", scanned_at="2026-09-09T00:00:00+00:00", **overrides):
+def _snapshot(
+    address="addr1", price=1.0, risk_level="MITTEL", scanned_at="2026-09-09T00:00:00+00:00",
+    pool_address="pool1", **overrides,
+):
     params = dict(
         address=address, symbol="SYM", scanned_at=scanned_at, liquidity_usd=10_000.0,
-        volume_24h_usd=5_000.0, holder_count=100, top10_percent=40.0, score_total=60,
-        risk_level=risk_level, creator_authority=None, price=price,
+        volume_24h_usd=5_000.0, holder_count=None, top10_percent=40.0, score_total=60,
+        risk_level=risk_level, creator_authority=None, price=price, pool_address=pool_address,
     )
     params.update(overrides)
     return Snapshot(**params)
@@ -22,9 +25,14 @@ def _client_with_candles(candles):
     return client
 
 
+# GeckoTerminal liefert Kerzen NEUESTE ZUERST: [unix_time, open, high, low, close, volume]
+def _candle(unix_time, close):
+    return [unix_time, close, close, close, close, 100.0]
+
+
 def test_backtest_snapshot_computes_positive_return():
     snapshot = _snapshot(price=1.0)
-    client = _client_with_candles([{"c": 1.5, "unix_time": 1_757_376_600}])
+    client = _client_with_candles([_candle(1_757_376_600, 1.5)])
     result = backtest_snapshot(client, snapshot, horizon_minutes=60)
     assert result is not None
     assert result.return_percent == 50.0
@@ -34,7 +42,7 @@ def test_backtest_snapshot_computes_positive_return():
 
 def test_backtest_snapshot_computes_negative_return():
     snapshot = _snapshot(price=2.0)
-    client = _client_with_candles([{"c": 0.5, "unix_time": 1_757_376_600}])
+    client = _client_with_candles([_candle(1_757_376_600, 0.5)])
     result = backtest_snapshot(client, snapshot, horizon_minutes=60)
     assert result.return_percent == -75.0
 
@@ -42,6 +50,12 @@ def test_backtest_snapshot_computes_negative_return():
 def test_backtest_snapshot_returns_none_without_entry_price():
     snapshot = _snapshot(price=None)
     result = backtest_snapshot(_client_with_candles([]), snapshot)
+    assert result is None
+
+
+def test_backtest_snapshot_returns_none_without_pool_address():
+    snapshot = _snapshot(pool_address=None)
+    result = backtest_snapshot(_client_with_candles([_candle(1_757_376_600, 1.5)]), snapshot)
     assert result is None
 
 
@@ -54,16 +68,16 @@ def test_backtest_snapshot_returns_none_when_no_candles():
 def test_backtest_snapshot_returns_none_on_api_error():
     snapshot = _snapshot(price=1.0)
     client = MagicMock()
-    client.get_ohlcv.side_effect = BirdeyeAPIError("rate limited")
+    client.get_ohlcv.side_effect = GeckoTerminalAPIError("rate limited")
     result = backtest_snapshot(client, snapshot)
     assert result is None
 
 
-def test_backtest_snapshot_uses_last_candle_as_exit():
+def test_backtest_snapshot_uses_first_candle_as_exit_since_newest_first():
     snapshot = _snapshot(price=1.0)
     client = _client_with_candles([
-        {"c": 1.2, "unix_time": 1_757_376_000},
-        {"c": 1.8, "unix_time": 1_757_376_600},  # letzte Kerze zaehlt
+        _candle(1_757_376_600, 1.8),  # neueste Kerze steht zuerst
+        _candle(1_757_376_000, 1.2),
     ])
     result = backtest_snapshot(client, snapshot)
     assert result.exit_price == 1.8
@@ -75,11 +89,22 @@ def test_run_backtest_skips_snapshots_without_price():
         record_snapshot(conn, _snapshot(address="a1", price=None))
         record_snapshot(conn, _snapshot(address="a2", price=1.0))
 
-        client = _client_with_candles([{"c": 2.0, "unix_time": 1_757_376_600}])
+        client = _client_with_candles([_candle(1_757_376_600, 2.0)])
         results = run_backtest(client, conn)
 
         assert len(results) == 1
         assert results[0].address == "a2"
+    finally:
+        conn.close()
+
+
+def test_run_backtest_skips_snapshots_without_pool_address():
+    conn = connect(db_path=":memory:")
+    try:
+        record_snapshot(conn, _snapshot(address="a1", price=1.0, pool_address=None))
+        client = _client_with_candles([_candle(1_757_376_600, 2.0)])
+        results = run_backtest(client, conn)
+        assert results == []
     finally:
         conn.close()
 

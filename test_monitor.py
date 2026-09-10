@@ -252,7 +252,7 @@ def test_alert_with_price_opens_a_paper_trade(mock_scan, mock_alert, mock_rechec
     mock_scan.return_value = [_result("HOT", "addr1", 85, price=0.001)]
     mock_recheck.return_value = []
     client = MagicMock()
-    client.get_price.return_value = {"value": 0.001}  # unveraendert -> kein Exit-Trigger
+    client.get_token_price.return_value = 0.001  # unveraendert -> kein Exit-Trigger
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=client, conn=conn)
@@ -287,7 +287,7 @@ def test_existing_paper_trade_is_not_opened_twice(mock_scan, mock_alert, mock_re
     mock_scan.return_value = [_result("HOT", "addr1", 85, price=0.001)]
     mock_recheck.return_value = []
     client = MagicMock()
-    client.get_price.return_value = {"value": 0.0005}  # unveraendert -> kein Exit-Trigger
+    client.get_token_price.return_value = 0.0005  # unveraendert -> kein Exit-Trigger
     conn = connect(db_path=":memory:")
     try:
         paper_trading.ensure_schema(conn)
@@ -314,7 +314,7 @@ def test_open_paper_trade_gets_closed_and_alerted_on_take_profit(mock_scan, mock
         paper_trading.open_trade(conn, "addr1", "HOT", entry_price=1.0, entry_score=60, entry_risk_level="MITTEL")
 
         client = MagicMock()
-        client.get_price.return_value = {"value": 2.5}  # +150% -> Take-Profit
+        client.get_token_price.return_value = 2.5  # +150% -> Take-Profit
 
         scan_once(client=client, conn=conn)
 

@@ -1,19 +1,21 @@
 """Backtesting: vergleicht den bei Erstsichtung vergebenen Score mit der
-tatsächlichen Kursentwicklung (Birdeye OHLCV) - beantwortet, ob unsere
+tatsächlichen Kursentwicklung (GeckoTerminal OHLCV) - beantwortet, ob unsere
 Scoring-Logik überhaupt prädiktiv ist, bevor wir simuliertes (paper_trading.py)
 oder gar echtes Geld darauf verwetten.
 
 Nutzt ausschließlich Daten, die wir schon selbst gesammelt haben
-(history.all_first_snapshots) plus die öffentliche OHLCV-API - kein
-zusätzlicher externer Datensatz nötig. Läuft nur für Snapshots, die einen
-Preis erfasst haben (price-Spalte, seit der entsprechenden Änderung in
-risk_scan.assess_token) - ältere Snapshots von davor haben price=None und
-werden übersprungen.
+(history.all_first_snapshots) plus die öffentliche GeckoTerminal-OHLCV-API -
+kein zusätzlicher externer Datensatz nötig. Läuft nur für Snapshots, die
+Preis UND Pool-Adresse erfasst haben (seit dem Wechsel auf GeckoTerminal;
+OHLCV braucht die Pool-Adresse, nicht die Token-Adresse) - ältere Snapshots
+von davor werden übersprungen.
 
-WICHTIG: Wenn die Erstsichtung jünger ist als `horizon_minutes`, gibt es noch
-keine Kerze am vollen Horizont - backtest_snapshot liefert dann die
-Preisveränderung bis zur aktuellsten verfügbaren Kerze (kürzerer, tatsächlicher
-Zeitraum statt des Zielhorizonts). Das steht im Ergebnis (elapsed_minutes).
+WICHTIG: GeckoTerminal liefert Kerzen NEUESTE ZUERST (absteigend nach Zeit) -
+der Exit-Punkt ist also candles[0], nicht candles[-1]. Wenn die Erstsichtung
+jünger ist als `horizon_minutes`, gibt es noch keine Kerze am vollen Horizont
+- backtest_snapshot liefert dann die Preisveränderung bis zur aktuellsten
+verfügbaren Kerze (kürzerer, tatsächlicher Zeitraum statt des Zielhorizonts).
+Das steht im Ergebnis (elapsed_minutes).
 """
 from __future__ import annotations
 
@@ -23,8 +25,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import history
-from birdeye_client import BirdeyeAPIError, BirdeyeClient
 from config import BACKTEST_HORIZON_MINUTES, BACKTEST_THROTTLE_SECONDS
+from geckoterminal_client import GeckoTerminalAPIError, GeckoTerminalClient
 
 
 @dataclass(frozen=True)
@@ -45,31 +47,35 @@ def _unix_time(iso_timestamp: str) -> int:
 
 
 def backtest_snapshot(
-    client: BirdeyeClient,
+    client: GeckoTerminalClient,
     snapshot: history.Snapshot,
     horizon_minutes: int = BACKTEST_HORIZON_MINUTES,
 ) -> BacktestResult | None:
-    """None, wenn kein Einstiegspreis vorliegt oder keine OHLCV-Daten für den
-    Zeitraum verfügbar sind (z.B. Coin ohne jeden weiteren Handel seitdem)."""
-    if snapshot.price is None or snapshot.price <= 0:
+    """None, wenn kein Einstiegspreis/keine Pool-Adresse vorliegt oder keine
+    OHLCV-Daten für den Zeitraum verfügbar sind (z.B. Coin ohne jeden
+    weiteren Handel seitdem)."""
+    if snapshot.price is None or snapshot.price <= 0 or not snapshot.pool_address:
         return None
 
     time_from = _unix_time(snapshot.scanned_at)
-    time_to = time_from + horizon_minutes * 60
+    before_timestamp = time_from + horizon_minutes * 60
 
     try:
-        candles = client.get_ohlcv(snapshot.address, type_="1m", time_from=time_from, time_to=time_to)
-    except BirdeyeAPIError:
+        candles = client.get_ohlcv(
+            snapshot.pool_address,
+            timeframe="minute",
+            aggregate=1,
+            before_timestamp=before_timestamp,
+            limit=min(horizon_minutes, 1000),
+        )
+    except GeckoTerminalAPIError:
         return None
 
-    if not candles:
+    if not candles or len(candles[0]) < 6:
         return None
 
-    last_candle = candles[-1]
-    exit_price = last_candle.get("c")
-    exit_unix_time = last_candle.get("unix_time")
-    if exit_price is None or exit_unix_time is None:
-        return None
+    # neueste zuerst -> die erste Kerze ist die naeheste am Ziel-Horizont
+    exit_unix_time, _open, _high, _low, exit_price, _volume = candles[0][:6]
 
     elapsed_minutes = (exit_unix_time - time_from) / 60
     return_percent = (exit_price - snapshot.price) / snapshot.price * 100
@@ -88,12 +94,12 @@ def backtest_snapshot(
 
 
 def run_backtest(
-    client: BirdeyeClient,
+    client: GeckoTerminalClient,
     conn,
     horizon_minutes: int = BACKTEST_HORIZON_MINUTES,
     limit: int | None = None,
 ) -> list[BacktestResult]:
-    snapshots = [s for s in history.all_first_snapshots(conn) if s.price is not None]
+    snapshots = [s for s in history.all_first_snapshots(conn) if s.price is not None and s.pool_address]
     if limit is not None:
         snapshots = snapshots[:limit]
 
@@ -128,7 +134,10 @@ def summarize_by_risk_level(results: list[BacktestResult]) -> dict[str, dict]:
 
 def _print_summary(results: list[BacktestResult]) -> None:
     if not results:
-        print("Keine Backtest-Ergebnisse (noch keine Snapshots mit erfasstem Preis, oder keine OHLCV-Daten verfügbar).")
+        print(
+            "Keine Backtest-Ergebnisse (noch keine Snapshots mit erfasstem "
+            "Preis+Pool-Adresse, oder keine OHLCV-Daten verfügbar)."
+        )
         return
 
     print(f"{len(results)} Coins zurückgetestet:\n")
@@ -151,7 +160,7 @@ def _print_summary(results: list[BacktestResult]) -> None:
 
 
 def main() -> None:
-    client = BirdeyeClient()
+    client = GeckoTerminalClient()
     conn = history.connect()
     try:
         results = run_backtest(client, conn)

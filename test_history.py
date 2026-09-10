@@ -164,6 +164,13 @@ def test_price_defaults_to_none_when_not_given():
         top10_percent=50.0, score_total=40, risk_level="HOCH",
     )
     assert snapshot.price is None
+    assert snapshot.pool_address is None
+
+
+def test_pool_address_round_trips_through_record_and_retrieve(conn):
+    record_snapshot(conn, _snapshot(pool_address="PoolAddr123"))
+    result = previous_snapshot(conn, "addr1")
+    assert result.pool_address == "PoolAddr123"
 
 
 def test_all_first_snapshots_returns_one_row_per_address(conn):

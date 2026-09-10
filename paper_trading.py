@@ -18,13 +18,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import history
-from birdeye_client import BirdeyeAPIError, BirdeyeClient
 from config import (
     PAPER_MAX_HOLD_MINUTES,
     PAPER_STOP_LOSS_PERCENT,
     PAPER_TAKE_PROFIT_PERCENT,
     PAPER_TRADE_SIZE_USD,
 )
+from geckoterminal_client import GeckoTerminalAPIError, GeckoTerminalClient
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS paper_trades (
@@ -149,20 +149,22 @@ def decide_exit(trade: PaperTrade, current_price: float, now: datetime | None = 
     return None
 
 
-def process_open_trades(client: BirdeyeClient, conn: sqlite3.Connection) -> list[tuple[PaperTrade, str, float]]:
+def process_open_trades(
+    client: GeckoTerminalClient,
+    conn: sqlite3.Connection,
+) -> list[tuple[PaperTrade, str, float]]:
     """Prüft alle offenen Positionen gegen den aktuellen Preis (ein leichter
-    /defi/price-Call pro Position, kein voller assess_token) und schließt sie,
-    falls eine Exit-Regel greift. Gibt (Trade, Exit-Grund, Exit-Preis) für
-    jede geschlossene Position zurück."""
+    Token-Preis-Call pro Position, kein voller assess_listing) und schließt
+    sie, falls eine Exit-Regel greift. Gibt (Trade, Exit-Grund, Exit-Preis)
+    für jede geschlossene Position zurück."""
     closed = []
 
     for trade in open_trades(conn):
         try:
-            price_data = client.get_price(trade.address)
-        except BirdeyeAPIError:
+            current_price = client.get_token_price(trade.address)
+        except GeckoTerminalAPIError:
             continue
 
-        current_price = price_data.get("value")
         if current_price is None:
             continue
 

@@ -26,6 +26,7 @@ jobs:
       - name: Run tests (fail fast statt kaputten Code zu scannen)
         env:
           BIRDEYE_API_KEY: ${{ secrets.BIRDEYE_API_KEY }}
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m pytest -q
@@ -41,6 +42,7 @@ jobs:
       - name: Run scan
         env:
           BIRDEYE_API_KEY: ${{ secrets.BIRDEYE_API_KEY }}
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python ci_scan.py

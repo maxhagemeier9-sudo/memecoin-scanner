@@ -19,8 +19,8 @@ from datetime import datetime, timezone
 import history
 import paper_trading
 from alerts import alert
-from birdeye_client import BirdeyeAPIError, BirdeyeClient
 from config import MONITOR_ALERT_SCORE_THRESHOLD, MONITOR_INTERVAL_SECONDS
+from geckoterminal_client import GeckoTerminalAPIError, GeckoTerminalClient
 from risk import Severity
 from risk_scan import (
     TokenAssessment,
@@ -62,7 +62,7 @@ def _should_alert(assessment: TokenAssessment) -> bool:
     return assessment.score.total >= MONITOR_ALERT_SCORE_THRESHOLD or assessment.report.overall <= Severity.MITTEL
 
 
-def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
+def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
     """Ein Scan-Zyklus: scannen, anzeigen, Zusammenfassung an Telegram
     schicken, neue auffällige Coins (siehe _should_alert) zusätzlich
     alarmieren, danach die Watchlist bereits bekannter Coins auf Wachstum
@@ -118,7 +118,7 @@ def scan_once(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
         )
 
 
-def run_monitor(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
+def run_monitor(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
     # Ohne Terminal (z.B. Hintergrundprozess) puffert Python stdout komplett -
     # ohne das hier kommt bei einem Dauerlauf keine Ausgabe an, bis der
     # Prozess von selbst endet. line_buffering sorgt dafür, dass jede Zeile
@@ -137,14 +137,14 @@ def run_monitor(client: BirdeyeClient, conn: sqlite3.Connection) -> None:
 
         try:
             scan_once(client, conn)
-        except BirdeyeAPIError as exc:
+        except GeckoTerminalAPIError as exc:
             print(f"Scan fehlgeschlagen, versuche es beim nächsten Intervall erneut: {exc}")
 
         time.sleep(MONITOR_INTERVAL_SECONDS)
 
 
 def main() -> None:
-    client = BirdeyeClient()
+    client = GeckoTerminalClient()
     conn = history.connect()
     try:
         run_monitor(client, conn)

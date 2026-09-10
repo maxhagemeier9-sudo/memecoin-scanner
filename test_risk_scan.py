@@ -1,5 +1,5 @@
 """Tests für die reinen Ranking-Hilfsfunktionen aus risk_scan.py - laufen
-offline, ohne API-Zugriff (BirdeyeClient wird hier nicht instanziiert)."""
+offline, ohne API-Zugriff (kein Client wird hier instanziiert)."""
 from risk import RiskFinding, Severity, build_report
 from risk_scan import (
     TokenAssessment,

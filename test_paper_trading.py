@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from birdeye_client import BirdeyeAPIError
+from geckoterminal_client import GeckoTerminalAPIError
 from history import connect
 from paper_trading import (
     PaperTrade,
@@ -101,7 +101,7 @@ def test_decide_exit_none_when_position_should_stay_open():
 def test_process_open_trades_closes_on_take_profit(conn):
     open_trade(conn, "addr1", "SYM", entry_price=1.0, entry_score=60, entry_risk_level="MITTEL")
     client = MagicMock()
-    client.get_price.return_value = {"value": 3.0}  # +200%
+    client.get_token_price.return_value = 3.0  # +200%
 
     closed = process_open_trades(client, conn)
 
@@ -115,7 +115,7 @@ def test_process_open_trades_closes_on_take_profit(conn):
 def test_process_open_trades_leaves_position_open_when_no_exit_rule_triggers(conn):
     open_trade(conn, "addr1", "SYM", entry_price=1.0, entry_score=60, entry_risk_level="MITTEL")
     client = MagicMock()
-    client.get_price.return_value = {"value": 1.05}
+    client.get_token_price.return_value = 1.05
 
     closed = process_open_trades(client, conn)
 
@@ -126,9 +126,20 @@ def test_process_open_trades_leaves_position_open_when_no_exit_rule_triggers(con
 def test_process_open_trades_survives_price_lookup_failure(conn):
     open_trade(conn, "addr1", "SYM", entry_price=1.0, entry_score=60, entry_risk_level="MITTEL")
     client = MagicMock()
-    client.get_price.side_effect = BirdeyeAPIError("rate limited")
+    client.get_token_price.side_effect = GeckoTerminalAPIError("rate limited")
 
     closed = process_open_trades(client, conn)  # darf nicht crashen
+
+    assert closed == []
+    assert has_open_trade(conn, "addr1") is True
+
+
+def test_process_open_trades_skips_when_price_is_none(conn):
+    open_trade(conn, "addr1", "SYM", entry_price=1.0, entry_score=60, entry_risk_level="MITTEL")
+    client = MagicMock()
+    client.get_token_price.return_value = None
+
+    closed = process_open_trades(client, conn)
 
     assert closed == []
     assert has_open_trade(conn, "addr1") is True
