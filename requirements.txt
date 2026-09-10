@@ -1,0 +1,5 @@
+requests
+python-dotenv
+
+# Für Tests (test_filters.py)
+pytest
