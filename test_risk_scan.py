@@ -1,7 +1,7 @@
 """Tests für die reinen Ranking-Hilfsfunktionen aus risk_scan.py - laufen
 offline, ohne API-Zugriff (BirdeyeClient wird hier nicht instanziiert)."""
 from risk import RiskFinding, Severity, build_report
-from risk_scan import TokenAssessment, _top_finding_text, rank_by_score
+from risk_scan import TokenAssessment, _display_width, _pad, _top_finding_text, rank_by_score
 from score import Score
 
 
@@ -52,3 +52,18 @@ def test_top_finding_text_truncates_long_messages():
     result = _top_finding_text(report, max_len=20)
     assert len(result) == 20
     assert result.endswith("…")
+
+
+def test_display_width_ascii_matches_character_count():
+    assert _display_width("STONK") == 5
+
+
+def test_display_width_cjk_characters_count_double():
+    assert _display_width("牛来") == 4  # 2 Zeichen, je 2 Spalten breit
+
+
+def test_pad_aligns_wide_and_narrow_strings_to_same_width():
+    padded_ascii = _pad("AB", 10)
+    padded_cjk = _pad("牛来", 10)
+    assert _display_width(padded_ascii) == 10
+    assert _display_width(padded_cjk) == 10

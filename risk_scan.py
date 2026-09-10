@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -178,6 +179,17 @@ def rank_by_score(
     return sorted(results, key=lambda pair: pair[1].score.total, reverse=True)[:top_n]
 
 
+def _display_width(text: str) -> int:
+    """Terminal-Breite eines Strings: CJK/Fullwidth-Zeichen (z.B. 牛来) belegen
+    zwei Spalten, `str.ljust`/f-string-Padding zählt aber nur Zeichen und
+    verschiebt dadurch Tabellenspalten bei solchen Symbolen."""
+    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+
+
+def _pad(text: str, width: int) -> str:
+    return text + " " * max(0, width - _display_width(text))
+
+
 def _top_finding_text(report: RiskReport, max_len: int = 42) -> str:
     if not report.findings:
         return "keine Auffälligkeiten"
@@ -211,7 +223,7 @@ def _print_ranking(results: list[tuple[dict, TokenAssessment]], top_n: int = RAN
         score_text = f"{score.total}{cap_marker}"
 
         print(
-            f"{icon} {rank:>2} | {report.symbol[:10]:10} | {score_text:>6} | "
+            f"{icon} {rank:>2} | {_pad(report.symbol[:10], 10)} | {score_text:>6} | "
             f"{report.overall.name:8} | {age:>6} | {liquidity_text:>11} | {_top_finding_text(report)}"
         )
 
