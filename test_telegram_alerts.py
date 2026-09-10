@@ -55,3 +55,53 @@ def test_network_exception_raises_telegram_error(mock_post):
 
     with pytest.raises(TelegramError):
         send_telegram_message("hello")
+
+
+@patch("telegram_alerts.time.sleep")
+@patch("telegram_alerts.TELEGRAM_ENABLED", True)
+@patch("telegram_alerts.TELEGRAM_BOT_TOKEN", "fake-token")
+@patch("telegram_alerts.TELEGRAM_CHAT_ID", "fake-chat")
+@patch("telegram_alerts.requests.post")
+def test_rate_limit_is_retried_after_the_wait_time_telegram_specifies(mock_post, mock_sleep):
+    rate_limited = Mock(status_code=429)
+    rate_limited.json.return_value = {"parameters": {"retry_after": 7}}
+    ok = Mock(status_code=200)
+    mock_post.side_effect = [rate_limited, ok]
+
+    send_telegram_message("hello")
+
+    assert mock_post.call_count == 2
+    mock_sleep.assert_called_once_with(7.0)
+
+
+@patch("telegram_alerts.time.sleep")
+@patch("telegram_alerts.TELEGRAM_ENABLED", True)
+@patch("telegram_alerts.TELEGRAM_BOT_TOKEN", "fake-token")
+@patch("telegram_alerts.TELEGRAM_CHAT_ID", "fake-chat")
+@patch("telegram_alerts.requests.post")
+def test_rate_limit_gives_up_after_max_retries(mock_post, mock_sleep):
+    rate_limited = Mock(status_code=429, text='{"error_code":429}')
+    rate_limited.json.return_value = {"parameters": {"retry_after": 1}}
+    mock_post.return_value = rate_limited
+
+    with pytest.raises(TelegramError):
+        send_telegram_message("hello")
+
+    assert mock_post.call_count == 4  # 1 initialer Versuch + 3 Retries
+    assert mock_sleep.call_count == 3
+
+
+@patch("telegram_alerts.time.sleep")
+@patch("telegram_alerts.TELEGRAM_ENABLED", True)
+@patch("telegram_alerts.TELEGRAM_BOT_TOKEN", "fake-token")
+@patch("telegram_alerts.TELEGRAM_CHAT_ID", "fake-chat")
+@patch("telegram_alerts.requests.post")
+def test_rate_limit_without_parseable_retry_after_uses_default_wait(mock_post, mock_sleep):
+    rate_limited = Mock(status_code=429)
+    rate_limited.json.side_effect = ValueError("not json")
+    ok = Mock(status_code=200)
+    mock_post.side_effect = [rate_limited, ok]
+
+    send_telegram_message("hello")
+
+    mock_sleep.assert_called_once_with(5)
