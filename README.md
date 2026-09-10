@@ -40,7 +40,9 @@ Seit 2026-09-10 (Birdeye-Compute-Units-Kontingent bis 2026-10-08 erschöpft):
 
 **Zuverlässig, mit den hier verfügbaren Datenquellen:**
 - Mint-/Freeze-Authority (on-chain, per Helius-RPC) - kann der Ersteller neue Token erzeugen oder Wallets einfrieren?
-- Token-2022-Extensions: TransferHook, PermanentDelegate, NonTransferable, Transfer-Steuer
+- Token-2022-Extensions: TransferHook, PermanentDelegate, NonTransferable, Transfer-Steuer,
+  veränderbare Token-Metadata (updateAuthority gesetzt - Ersteller kann Name/Symbol/Bild später
+  ändern, klassischer Rebrand-Scam-Trick)
 - Holder-Konzentration (Top-10-%, aus `getTokenLargestAccounts` + Supply selbst berechnet)
 - Liquidität, Volumen/Liquidität-Verhältnis, Wash-Trading-Muster (Trades/Wallet)
 - Liquiditäts-Trend seit dem letzten Scan derselben Adresse

@@ -84,7 +84,11 @@ def assess_listing(listing: PoolListing, conn: sqlite3.Connection | None = None)
     try:
         authorities = get_mint_authorities(listing.token_address)
         findings += evaluate_authorities(authorities.mint_authority, authorities.freeze_authority)
-        findings += evaluate_token_extensions(authorities.extensions, authorities.transfer_fee_basis_points)
+        findings += evaluate_token_extensions(
+            authorities.extensions,
+            authorities.transfer_fee_basis_points,
+            update_authority=authorities.update_authority,
+        )
         transfer_fee_bps = authorities.transfer_fee_basis_points
         update_authority = authorities.update_authority
 

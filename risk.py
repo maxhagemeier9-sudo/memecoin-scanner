@@ -7,9 +7,10 @@ dadurch offline testbar, analog zu filters.py.
 WICHTIG - das ist ein marktbasierter Heuristik-Check, kein vollständiger
 Security-Audit:
 - Mint-/Freeze-Authority und Token-2022-Extensions (TransferHook,
-  PermanentDelegate, NonTransferable, Transfer-Steuer) werden geprüft
-  (siehe solana_rpc.py) - das deckt die gängigsten technischen Rug- und
-  Honeypot-Signale ab, die sich direkt aus dem Mint-Account lesen lassen.
+  PermanentDelegate, NonTransferable, Transfer-Steuer, veränderbare
+  Token-Metadata) werden geprüft (siehe solana_rpc.py) - das deckt die
+  gängigsten technischen Rug- und Honeypot-Signale ab, die sich direkt aus
+  dem Mint-Account lesen lassen.
 - Liquiditäts-Sperren/-Burns werden NICHT geprüft: die meisten frisch
   gelisteten Coins laufen noch auf einer Bonding Curve ohne klassischen
   LP-Token, und eine verlässliche Prüfung würde eine zusätzliche, weniger
@@ -74,6 +75,7 @@ def evaluate_token_extensions(
     extensions: frozenset[str],
     transfer_fee_basis_points: int | None,
     thresholds: RiskThresholds = DEFAULT_RISK_THRESHOLDS,
+    update_authority: str | None = None,
 ) -> list[RiskFinding]:
     findings: list[RiskFinding] = []
 
@@ -95,6 +97,13 @@ def evaluate_token_extensions(
         findings.append(RiskFinding(
             Severity.KRITISCH,
             "NonTransferable-Extension aktiv - Token kann grundsätzlich nicht übertragen/verkauft werden",
+        ))
+
+    if "tokenMetadata" in extensions and update_authority is not None:
+        findings.append(RiskFinding(
+            Severity.MITTEL,
+            "Token-Metadata noch veränderbar (updateAuthority gesetzt) - Ersteller kann Name/"
+            "Symbol/Bild nachträglich ändern (Rebrand-Risiko: toter Coin als neuer Hype-Coin getarnt)",
         ))
 
     if transfer_fee_basis_points is not None:

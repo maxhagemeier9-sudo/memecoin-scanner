@@ -88,6 +88,29 @@ def test_harmless_extensions_yield_no_findings():
     assert findings == []
 
 
+def test_mutable_token_metadata_is_mittel():
+    findings = evaluate_token_extensions(
+        frozenset({"metadataPointer", "tokenMetadata"}), None, THRESHOLDS, update_authority="CreatorWallet"
+    )
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.MITTEL
+    assert "Rebrand" in findings[0].message
+
+
+def test_immutable_token_metadata_is_not_flagged():
+    findings = evaluate_token_extensions(
+        frozenset({"metadataPointer", "tokenMetadata"}), None, THRESHOLDS, update_authority=None
+    )
+    assert findings == []
+
+
+def test_update_authority_without_token_metadata_extension_is_not_flagged():
+    # update_authority stammt aus derselben Extension - ohne "tokenMetadata" in
+    # den Extensions kann das praktisch nicht vorkommen, aber defensiv geprüft
+    findings = evaluate_token_extensions(frozenset(), None, THRESHOLDS, update_authority="CreatorWallet")
+    assert findings == []
+
+
 def test_normal_transfer_fee_is_not_flagged():
     findings = evaluate_token_extensions(frozenset({"transferFeeConfig"}), 100, THRESHOLDS)
     assert findings == []
