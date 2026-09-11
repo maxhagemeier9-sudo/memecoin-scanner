@@ -2,6 +2,13 @@
 ein Coin auffällig gut aussieht (siehe _should_alert) - ohne dieselbe Adresse
 mehrfach zu melden. Beenden mit Strg+C.
 
+Zwei Discovery-Quellen: scan_new_coins() (chronologisch neueste Pools) und
+scan_trending_coins() (Pools mit starkem Handelsmomentum, als Näherung für
+"Social-Media-Buzz" ganz ohne eigene Social-Media-API - siehe risk_scan.py).
+Coins aus scan_new_coins werden von scan_trending_coins ausgeschlossen
+(exclude_addresses), damit derselbe Coin nicht doppelt bewertet/alarmiert
+wird; Trending-Alerts sind an ihrem "📢 Trending"-Präfix erkennbar.
+
 Nutzt dieselbe Historie-DB wie risk_scan.py, dadurch profitieren auch die
 Trend-/Creator-Signale (evaluate_liquidity_trend, evaluate_creator_history)
 vom wiederholten Scannen über die Zeit. Pro Scan-Zyklus wird nicht für
@@ -50,6 +57,7 @@ from risk_scan import (
     pool_url,
     recheck_watchlist,
     scan_new_coins,
+    scan_trending_coins,
 )
 from telegram_alerts import TelegramError, send_telegram_message
 
@@ -158,6 +166,23 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
             if best_candidate is None or assessment.score.total > best_candidate.score.total:
                 best_candidate = assessment
 
+    def _handle_trending(listing: dict, assessment: TokenAssessment) -> None:
+        nonlocal best_candidate
+        address = listing["address"]
+        if history.has_been_alerted(conn, address):
+            return
+        if _should_alert(assessment):
+            alert(_with_link(
+                f"📢 Trending (Social-Buzz-Proxy): {assessment.report.symbol} - Score "
+                f"{assessment.score.total}/100, Risiko {assessment.report.overall.name} ({address})",
+                assessment.pool_address,
+            ))
+            history.mark_alerted(conn, address)
+            if assessment.report.overall == Severity.NIEDRIG:
+                _send_verified_signal(assessment, address)
+            if best_candidate is None or assessment.score.total > best_candidate.score.total:
+                best_candidate = assessment
+
     def _handle_rising(first: history.Snapshot, assessment: TokenAssessment) -> None:
         nonlocal best_candidate
         address = assessment.report.address
@@ -186,6 +211,9 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
         send_telegram_message(format_telegram_summary(results), parse_mode="HTML")
     except TelegramError as exc:
         print(f"   (Telegram-Zusammenfassung fehlgeschlagen: {exc})")
+
+    already_seen = {listing["address"] for listing, _ in results}
+    scan_trending_coins(client, conn=conn, exclude_addresses=already_seen, on_assessed=_handle_trending)
 
     recheck_watchlist(client, conn, on_assessed=_handle_rising)
 

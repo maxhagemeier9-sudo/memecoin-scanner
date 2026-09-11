@@ -40,6 +40,9 @@ from config import (
     RANKING_TOP_N,
     RISING_STAR_RECHECK_LIMIT,
     RISK_SCAN_THROTTLE_SECONDS,
+    TRENDING_SCAN_DURATION,
+    TRENDING_SCAN_MAX_AGE_MINUTES,
+    TRENDING_SCAN_PAGES,
     RiskThresholds,
 )
 from export import export_ranking
@@ -208,6 +211,62 @@ def scan_new_coins(
         if on_assessed is not None:
             on_assessed(listing_dict, assessment)
         time.sleep(RISK_SCAN_THROTTLE_SECONDS)
+
+    return results
+
+
+def scan_trending_coins(
+    client: GeckoTerminalClient,
+    pages: int = TRENDING_SCAN_PAGES,
+    duration: str = TRENDING_SCAN_DURATION,
+    max_age_minutes: float = TRENDING_SCAN_MAX_AGE_MINUTES,
+    conn: sqlite3.Connection | None = None,
+    exclude_addresses: set[str] | None = None,
+    on_assessed: Callable[[dict, TokenAssessment], None] | None = None,
+) -> list[tuple[dict, TokenAssessment]]:
+    """Coins mit starkem Handelsmomentum im gewählten Zeitfenster (siehe
+    geckoterminal_client.get_trending_pools) - eine Näherung für "Social-
+    Media-Buzz", ganz ohne eigene Social-Media-API/-Zugangsdaten: statt
+    Erwähnungen auf Twitter/Telegram zu zählen, nutzen wir echtes
+    Handelsvolumen als Proxy dafür, dass gerade viele Leute auf einen Coin
+    aufmerksam werden.
+
+    Auf `max_age_minutes` gefiltert, weil "trending" auch länger etablierte
+    Coins enthalten kann (Alter live beobachtet: von wenigen Minuten bis zu
+    Monaten) - hier soll es aber weiterhin um "relativ neue" Coins gehen,
+    nicht um bereits etablierte. `exclude_addresses` überspringt Coins, die
+    im selben Lauf schon über scan_new_coins bewertet wurden (spart RPC-
+    Calls, verhindert doppelte Alerts für denselben Coin aus zwei Quellen).
+    """
+    exclude_addresses = exclude_addresses or set()
+    pools = []
+    for page in range(1, pages + 1):
+        pools += client.get_trending_pools(duration=duration, page=page)
+        client.throttle()
+
+    results = []
+    seen_tokens: set[str] = set()
+
+    for pool in pools:
+        listing = parse_pool(pool)
+        if listing is None or listing.token_address in seen_tokens:
+            continue
+        if listing.token_address in exclude_addresses:
+            continue
+        if not listing.created_at or age_minutes(listing.created_at) > max_age_minutes:
+            continue
+        seen_tokens.add(listing.token_address)
+
+        assessment = assess_listing(listing, conn=conn)
+        listing_dict = {
+            "address": listing.token_address,
+            "symbol": listing.symbol,
+            "liquidityAddedAt": listing.created_at,
+        }
+        results.append((listing_dict, assessment))
+        if on_assessed is not None:
+            on_assessed(listing_dict, assessment)
+        client.throttle()
 
     return results
 

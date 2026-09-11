@@ -2,6 +2,7 @@
 prüft die Verdrahtung zwischen GeckoTerminal, Helius-RPC, Historie und den
 reinen Bewertungsfunktionen - alles gemockt, keine Live-Calls.
 """
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,7 +10,14 @@ import pytest
 from geckoterminal_client import GeckoTerminalAPIError, PoolListing
 from history import Snapshot, connect, record_snapshot
 from risk import Severity, build_report
-from risk_scan import TokenAssessment, assess_listing, is_rising, recheck_watchlist, scan_new_coins
+from risk_scan import (
+    TokenAssessment,
+    assess_listing,
+    is_rising,
+    recheck_watchlist,
+    scan_new_coins,
+    scan_trending_coins,
+)
 from score import Score
 from solana_rpc import MintAuthorities, SolanaRPCError
 
@@ -28,12 +36,12 @@ def _listing(
     )
 
 
-def _pool_dict(token_address="addr", pool_address="pool1", symbol="SYM"):
+def _pool_dict(token_address="addr", pool_address="pool1", symbol="SYM", pool_created_at="2026-09-10T00:00:00Z"):
     return {
         "attributes": {
             "address": pool_address,
             "name": f"{symbol} / SOL",
-            "pool_created_at": "2026-09-10T00:00:00Z",
+            "pool_created_at": pool_created_at,
             "base_token_price_usd": "1.0",
             "reserve_in_usd": "100000.0",
             "volume_usd": {"h24": "200000.0"},
@@ -240,6 +248,70 @@ def test_scan_new_coins_paginates_and_dedupes_by_token_address(mock_authorities,
     assert len(results) == 30  # 0-29, dedupliziert trotz Overlap 10-19
     addresses = [listing["address"] for listing, _ in results]
     assert len(addresses) == len(set(addresses))
+
+
+@patch("risk_scan.get_top10_concentration")
+@patch("risk_scan.get_mint_authorities")
+def test_scan_trending_coins_assesses_relatively_new_pools(mock_authorities, mock_top10):
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None, total_supply=1_000_000.0)
+    mock_top10.return_value = 10.0
+
+    fresh = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    client = MagicMock()
+    client.get_trending_pools.return_value = [_pool_dict(token_address="addr", pool_created_at=fresh)]
+
+    results = scan_trending_coins(client, pages=1)
+
+    assert len(results) == 1
+    assert results[0][0]["address"] == "addr"
+    client.get_trending_pools.assert_called_once_with(duration="1h", page=1)
+
+
+@patch("risk_scan.get_top10_concentration")
+@patch("risk_scan.get_mint_authorities")
+def test_scan_trending_coins_skips_pools_older_than_max_age(mock_authorities, mock_top10):
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None, total_supply=1_000_000.0)
+    mock_top10.return_value = 10.0
+
+    old = (datetime.now(timezone.utc) - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    client = MagicMock()
+    client.get_trending_pools.return_value = [_pool_dict(token_address="addr", pool_created_at=old)]
+
+    results = scan_trending_coins(client, pages=1, max_age_minutes=24 * 60)
+
+    assert results == []
+
+
+@patch("risk_scan.get_top10_concentration")
+@patch("risk_scan.get_mint_authorities")
+def test_scan_trending_coins_skips_excluded_addresses(mock_authorities, mock_top10):
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None, total_supply=1_000_000.0)
+    mock_top10.return_value = 10.0
+
+    fresh = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    client = MagicMock()
+    client.get_trending_pools.return_value = [_pool_dict(token_address="already-seen", pool_created_at=fresh)]
+
+    results = scan_trending_coins(client, pages=1, exclude_addresses={"already-seen"})
+
+    assert results == []
+    mock_authorities.assert_not_called()  # gar nicht erst bewertet, spart RPC-Calls
+
+
+@patch("risk_scan.get_top10_concentration")
+@patch("risk_scan.get_mint_authorities")
+def test_scan_trending_coins_invokes_on_assessed_immediately(mock_authorities, mock_top10):
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None, total_supply=1_000_000.0)
+    mock_top10.return_value = 10.0
+
+    fresh = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    client = MagicMock()
+    client.get_trending_pools.return_value = [_pool_dict(token_address="addr", pool_created_at=fresh)]
+
+    seen = []
+    scan_trending_coins(client, pages=1, on_assessed=lambda listing, a: seen.append(listing["address"]))
+
+    assert seen == ["addr"]
 
 
 @patch("risk_scan.get_top10_concentration")

@@ -103,6 +103,15 @@ SOLANA_RPC_URL = f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
 RANKING_SCAN_PAGES = 2  # 2 Seiten x 20 = 40 Coins pro Lauf
 RISK_SCAN_THROTTLE_SECONDS = 0.5
 
+# Trending-Pools (risk_scan.scan_trending_coins): Näherung für "Social-Media-
+# Buzz" ganz ohne eigene Social-Media-API - Coins mit starkem Handels-
+# momentum im gewählten Zeitfenster, gefiltert auf noch relativ neue Coins
+# (siehe TRENDING_SCAN_MAX_AGE_MINUTES), durch dieselbe Risiko-Pipeline wie
+# scan_new_coins bewertet.
+TRENDING_SCAN_DURATION = "1h"
+TRENDING_SCAN_PAGES = 1  # 1 Seite x 20 = 20 Coins pro Lauf, schon nach Momentum sortiert
+TRENDING_SCAN_MAX_AGE_MINUTES = 24 * 60  # nur Coins bis 24h alt gelten hier als "relativ neu"
+
 # Wie viele Coins im Ranking angezeigt werden (sinnvoller Bereich laut
 # Nutzer-Vorgabe: 5-20).
 RANKING_TOP_N = 10

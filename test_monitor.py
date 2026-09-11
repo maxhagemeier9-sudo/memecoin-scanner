@@ -27,6 +27,18 @@ def _no_real_daily_jobs():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _no_real_trending_scan():
+    """scan_trending_coins() wird in JEDEM scan_once()-Aufruf ausgefuehrt -
+    ohne diesen Autouse-Mock wuerde die echte Funktion versuchen,
+    client.get_trending_pools() auf welchem Client-Objekt auch immer ein
+    Test uebergibt (haeufig object()/MagicMock() ohne echtes Verhalten)
+    aufzurufen. Einzelne Tests ueberschreiben das Ziel-Patch selbst (siehe
+    test_trending_*)."""
+    with patch("monitor.scan_trending_coins", return_value=[]):
+        yield
+
+
 def _fake_scan(results):
     """Simuliert scan_new_coins(): ruft on_assessed (falls uebergeben) sofort
     pro Ergebnis auf, genau wie die echte Implementierung, die Alerts inline
@@ -44,6 +56,15 @@ def _fake_recheck(results):
         if on_assessed is not None:
             for first, assessment in results:
                 on_assessed(first, assessment)
+        return results
+    return _fake
+
+
+def _fake_trending(results):
+    def _fake(client, conn=None, exclude_addresses=None, on_assessed=None):
+        if on_assessed is not None:
+            for listing, assessment in results:
+                on_assessed(listing, assessment)
         return results
     return _fake
 
@@ -383,6 +404,70 @@ def test_rising_alert_is_persisted_and_independent_of_regular_alerts(mock_scan, 
         scan_once(client=object(), conn=conn)
         assert has_been_rising_alerted(conn, "addr1")
         assert not has_been_alerted(conn, "addr1")  # regulaere Alert-Kategorie unberuehrt
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.scan_trending_coins")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_trending_coin_triggers_an_alert_with_trending_prefix(mock_scan, mock_alert, mock_trending, mock_send):
+    mock_scan.return_value = []
+    mock_trending.side_effect = _fake_trending([_result("BUZZ", "addr1", 85)])
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        assert any("📢 Trending" in c.args[0] for c in mock_alert.call_args_list)
+        assert any("BUZZ" in c.args[0] for c in mock_alert.call_args_list)
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.scan_trending_coins")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_trending_coin_excludes_addresses_already_seen_by_regular_scan(mock_scan, mock_alert, mock_trending, mock_send):
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85)])
+    mock_trending.return_value = []
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        passed_exclude = mock_trending.call_args.kwargs.get("exclude_addresses")
+        assert passed_exclude == {"addr1"}
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.scan_trending_coins")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_trending_niedrig_risk_coin_also_gets_a_verified_signal(mock_scan, mock_alert, mock_trending, mock_send):
+    mock_scan.return_value = []
+    mock_trending.side_effect = _fake_trending([_result("SAFEBUZZ", "addr1", 80)])  # keine Findings -> NIEDRIG
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        assert mock_alert.call_count == 2
+        assert any("Verified-Signal" in c.args[0] for c in mock_alert.call_args_list)
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.scan_trending_coins")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_already_alerted_trending_coin_is_not_alerted_again(mock_scan, mock_alert, mock_trending, mock_send):
+    mock_scan.return_value = []
+    mock_trending.side_effect = _fake_trending([_result("BUZZ", "addr1", 85)])
+    conn = connect(db_path=":memory:")
+    try:
+        mark_alerted(conn, "addr1")
+        scan_once(client=object(), conn=conn)
+        mock_alert.assert_not_called()
     finally:
         conn.close()
 

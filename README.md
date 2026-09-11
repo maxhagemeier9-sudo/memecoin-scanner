@@ -79,6 +79,18 @@ einzige Auffälligkeit) bekommen zusätzlich eine SEPARATE Telegram-Nachricht (s
 (recherchiert 2026-09-11). Nur für neu entdeckte Coins (`scan_new_coins`), nicht für die
 Rising-Watchlist.
 
+**Trending-Scan (Social-Media-Buzz-Proxy):** `risk_scan.scan_trending_coins()` nutzt
+GeckoTerminals `trending_pools`-Endpunkt (Pools mit starkem Handelsmomentum im letzten Zeitfenster,
+Standard `1h`) als Näherung für "gerade viel Aufmerksamkeit bekommend" - ganz ohne eigene
+Social-Media-API/-Zugangsdaten (Twitter/X-API ist im Gratis-Tier praktisch unbrauchbar,
+für Telegram-Kanäle gibt es keine automatisierbare, allgemeine Quelle). Nur auf Coins bis
+`TRENDING_SCAN_MAX_AGE_MINUTES` (Standard 24h) alt gefiltert, da "trending" sonst auch
+längst etablierte Coins enthält (live beobachtet: von wenigen Minuten bis zu Jahren alt) - in der
+Praxis besteht dadurch oft nur 1 von 20 Trending-Pools den Alters-Filter, bleibt also ein seltenes,
+aber sinnvolles Zusatzsignal statt einer Alert-Flut. Alerts sind am `📢 Trending`-Präfix erkennbar,
+laufen durch dieselbe Risiko-Pipeline wie `scan_new_coins` und werden von dieser ausgeschlossen
+(`exclude_addresses`), um denselben Coin nicht doppelt zu bewerten/alarmieren.
+
 ## Lokal einrichten
 
 ```bash

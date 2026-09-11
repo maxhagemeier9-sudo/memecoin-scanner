@@ -136,6 +136,17 @@ class GeckoTerminalClient:
         data = self._get(f"/networks/{self._network}/new_pools", {"page": page})
         return data.get("data", [])
 
+    def get_trending_pools(self, duration: str = "1h", page: int = 1) -> list[dict[str, Any]]:
+        """Pools mit dem stärksten Handelsmomentum im gewählten Zeitfenster
+        (live verifiziert gültige duration-Werte: "5m", "1h", "6h", "24h") -
+        Näherung für "Social-Media-Buzz", ganz ohne eigene Social-Media-API
+        (siehe risk_scan.scan_trending_coins). Dasselbe Antwortformat wie
+        get_new_pools/get_pool, deshalb wiederverwendbar mit parse_pool."""
+        data = self._get(
+            f"/networks/{self._network}/trending_pools", {"page": page, "duration": duration}
+        )
+        return data.get("data", [])
+
     def get_pool(self, pool_address: str) -> dict[str, Any] | None:
         data = self._get(f"/networks/{self._network}/pools/{pool_address}")
         return data.get("data")
