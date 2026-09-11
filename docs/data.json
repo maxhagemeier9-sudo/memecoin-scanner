@@ -1,0 +1,593 @@
+{
+  "generated_at": "2026-09-11T10:30:59.087971+00:00",
+  "stats": {
+    "total_snapshots": 442,
+    "total_unique_coins": 381,
+    "total_alerts": 1,
+    "total_rising_alerts": 0,
+    "risk_level_counts": {
+      "HOCH": 366,
+      "KRITISCH": 3,
+      "MITTEL": 1,
+      "NIEDRIG": 11
+    }
+  },
+  "recent_snapshots": [
+    {
+      "address": "22dqoLsrrje4gPfFzBhzWUUDVXRKUPjCiiYZBCTChzL3",
+      "symbol": "Aster",
+      "scanned_at": "2026-09-10T17:26:49.868822+00:00",
+      "liquidity_usd": 22220.0772,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/8FK8tVPdBkkBUm4LRMqLQf8ozJjVdTugo9twSLk7Nvjq"
+    },
+    {
+      "address": "HWFxypnvY9am5fa8kTF2Vi7gnycxJjQY8wyqFNdGpump",
+      "symbol": "[invalid]",
+      "scanned_at": "2026-09-10T17:26:48.854883+00:00",
+      "liquidity_usd": 2214.483,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/BkdwabU54CedmqTb8riCVmZQzByQigyAC42SW4r1NLns"
+    },
+    {
+      "address": "6HdfT3CvpDCnR1HNX7cZHSrFxMwTcpdByAz9ymZ9pump",
+      "symbol": "$SOLGANG",
+      "scanned_at": "2026-09-10T17:26:47.665964+00:00",
+      "liquidity_usd": 2253.2887,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/2j2vUnwrP5UPMaEysQpQ95bRWdgNKxUU9G8y1jpK4uuv"
+    },
+    {
+      "address": "5RyaPusbgigkpLEa59GtVCyvSHush3VmLZnyja3KBZCw",
+      "symbol": "SEC",
+      "scanned_at": "2026-09-10T17:26:46.728835+00:00",
+      "liquidity_usd": 0.0,
+      "score": 19,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/8Vrokz6cwQwevzZM8cCWip76j435SeK7CCw3fWkUE9q6"
+    },
+    {
+      "address": "F5JC22e4PtVYCq7wLzavkCAKLQsB4wv2cxLTn5cYpump",
+      "symbol": "COFFIN",
+      "scanned_at": "2026-09-10T17:26:45.869349+00:00",
+      "liquidity_usd": 2499.9876,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/4DYDWcMGh8WBYPTz8RYQrCioSLvdU7pW5UCxLhuHCpBY"
+    },
+    {
+      "address": "HQw5wXXpFYNepkLEVoxosWiWXedezVk9T27wJVgLpump",
+      "symbol": "KIRKIVERSARY",
+      "scanned_at": "2026-09-10T17:26:44.924349+00:00",
+      "liquidity_usd": 2226.9453,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/GGwdBwncy2XW8b91SJyHcJjZNz4Qx71yTQqjDk3giDJQ"
+    },
+    {
+      "address": "4Ao4qKkYPkD8UaXovbwKiuw66DWigny1Y2zBpdqqpump",
+      "symbol": "Manny",
+      "scanned_at": "2026-09-10T17:26:43.943479+00:00",
+      "liquidity_usd": 2223.0559,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/C9V63rihHvgVTPpVUtowkjCSf2pz1thvPVZoxDXBmzhv"
+    },
+    {
+      "address": "D1Yu92daWM6JubHAPx48VHHFgjoSkqFiYXJbj88Ypump",
+      "symbol": "beer",
+      "scanned_at": "2026-09-10T17:26:42.857014+00:00",
+      "liquidity_usd": 3043.508,
+      "score": 42,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/CskX4rpg2otHNurkxkG5e9KVzNWy4mKGcj8sW4AJSox4"
+    },
+    {
+      "address": "D3g7SSR7NoZLoGu7LQQHiQ48iYL9otWsnpjZXeCouMNj",
+      "symbol": "FLY",
+      "scanned_at": "2026-09-10T17:26:41.978062+00:00",
+      "liquidity_usd": 25590.8452,
+      "score": 58,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/6G4zBnsZnWuSaB4x3fSipUHQDt8rTorPbA7843tNuWFA"
+    },
+    {
+      "address": "GDZGu8uaKHzCPoP5LoRqXTiKcn28t8YbV2i5aKsTpump",
+      "symbol": "RETARDO",
+      "scanned_at": "2026-09-10T17:26:41.070812+00:00",
+      "liquidity_usd": 896.1765,
+      "score": 34,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/HX2Jjxhs4rYPDKCfXMMuKtbZtuyd8uCS33hKriGnwpqB"
+    },
+    {
+      "address": "AFseui2XdPxTgDCPMyYDPhW5ye49ghc6Xozae3tZ2571",
+      "symbol": "POLLY",
+      "scanned_at": "2026-09-10T17:26:40.190685+00:00",
+      "liquidity_usd": 34230.5966,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/6SYhfku4H91wLQKHxvCgBhooT2yB1hQvXRf7qM4zXSgK"
+    },
+    {
+      "address": "36YdVMwZ6EK4D87L9YwQFD2m2u8okFwP5dbSRMZ4dHYT",
+      "symbol": "SSE",
+      "scanned_at": "2026-09-10T17:26:39.232950+00:00",
+      "liquidity_usd": 140108.0775,
+      "score": 56,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/35YDR7neHR2pGdV3wEo6PqK1EeJ51byLV1Vs82sKhj8A"
+    },
+    {
+      "address": "BMzDGwDWNnHt9ocQzKca77aFkSeaBPeDgv7B3JNMgUD8",
+      "symbol": "SSE",
+      "scanned_at": "2026-09-10T17:26:38.112312+00:00",
+      "liquidity_usd": 4.5062,
+      "score": 49,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/6ctujm8ibD6zq4JTPbaSejYroyyAF2U1jax9waXJmzn9"
+    },
+    {
+      "address": "4Yw3jkrw7aFoHGiu3YLMA28UzP2JZ7PpBWRDe7SeKpfP",
+      "symbol": "MPUBS",
+      "scanned_at": "2026-09-10T17:26:37.060396+00:00",
+      "liquidity_usd": 2883.4383,
+      "score": 36,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/DRufqtvAtpU3dcncYbAsoDG5ZzyCPgsTnAm9FxDFWCyk"
+    },
+    {
+      "address": "GNDNEcR56uKEtR58ALUtg2NBk7immZe76PnA4WR4pump",
+      "symbol": "ansem",
+      "scanned_at": "2026-09-10T17:26:36.084133+00:00",
+      "liquidity_usd": 2843.9885,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/BzNNGekqYM8Gco9oZ8HXSAkMJg1hPLLwRZHv2hGiLCbm"
+    },
+    {
+      "address": "eeURiHBEv439vvz5ufGYu4KyXDgVddYpqbCfChxBAGS",
+      "symbol": "Oilbal",
+      "scanned_at": "2026-09-10T17:26:35.064242+00:00",
+      "liquidity_usd": 95880.2026,
+      "score": 56,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/3A9i4Xgk9XiJMXDqHbWndcZr9C8dpQS6Miw7ULn8AVbk"
+    },
+    {
+      "address": "GRy6fgsNjnz2iHyAeRH1bSSzs9ANRZk2isqjnyqBpump",
+      "symbol": "iCat",
+      "scanned_at": "2026-09-10T17:26:34.284186+00:00",
+      "liquidity_usd": 2218.7789,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/53T6ffPn1EyQiQDnhxfeRWXKmp2axWXxaTKmCeDM5CyH"
+    },
+    {
+      "address": "AWejj7i56Krz1eKyaRg8Bi9DjJ8adPRbejhFt6sbpump",
+      "symbol": "churlie",
+      "scanned_at": "2026-09-10T17:26:33.317506+00:00",
+      "liquidity_usd": 2311.3034,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/E5x1QuhnbwLUNZ5nzUEgsiZJLYsBk7vzUkKPkSoqChir"
+    },
+    {
+      "address": "766RvnsM147zT1Kk9oU8ojhiKxcH1htNMwhLUxMfpump",
+      "symbol": "ZVC",
+      "scanned_at": "2026-09-10T17:26:32.458764+00:00",
+      "liquidity_usd": 3317.6481,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/F3QPhM8rgVbz7h1443GDGbcUrMnFMRCqwKZqPv4yDcZ2"
+    },
+    {
+      "address": "G9bntmULw7DrczwFF1vTCoWstsyXh2m5NLHXmJQrMxEC",
+      "symbol": "VAGINA",
+      "scanned_at": "2026-09-10T17:26:31.423054+00:00",
+      "liquidity_usd": 0.0,
+      "score": 25,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/EceLhMmDZ5vR61eK4ND6mdLGNrNwXiA96jzZ9KhRiNMY"
+    },
+    {
+      "address": "9CixVMPNx2cuWPgVv6zo7L9tsPY7fZXDmet7X7QvuPEH",
+      "symbol": "Pnut",
+      "scanned_at": "2026-09-10T17:26:30.536230+00:00",
+      "liquidity_usd": 22344.2226,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/Fx9dvMjgWGjVhufSoddtzddVHVAwEJBeaRkDsTK439Z1"
+    },
+    {
+      "address": "DPWW3oUs4AARyiqNiE43SbUpdhMS2CHf2VY98NYGCgJA",
+      "symbol": "FIN",
+      "scanned_at": "2026-09-10T17:26:29.634140+00:00",
+      "liquidity_usd": 2970.2615,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/2cT9C7srf3UiGt3oGHHX9zwwBqhou22RPYkJv3fXRkUi"
+    },
+    {
+      "address": "8S8AHdqJi15fnxbgiLWLqs8zHftW4kzVm2K1REBBpump",
+      "symbol": "DOG⁠",
+      "scanned_at": "2026-09-10T17:26:28.688183+00:00",
+      "liquidity_usd": 1712.2384,
+      "score": 25,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/F4PqN3m9Va825W9YoCSChNeXHkcbP36hdqr7TMSyTFbV"
+    },
+    {
+      "address": "6PBWN1MeMfr3tAJtpzPHrbhC45qVfsTwPxtMrrpHpump",
+      "symbol": "MARIO",
+      "scanned_at": "2026-09-10T17:24:03.580337+00:00",
+      "liquidity_usd": 0.0,
+      "score": 60,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/9NWNUemV7fvUt6tFGbhjqs1CoHdPwzhi1dGKqAXHefRc"
+    },
+    {
+      "address": "GE9ev2oPBd5EnEKTGD1YxSnZrR8wodnC3wkvh9TRVppX",
+      "symbol": "SEC",
+      "scanned_at": "2026-09-10T17:24:02.701874+00:00",
+      "liquidity_usd": 1.3585,
+      "score": 25,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/9n4XhGS3jPuvE6LUJ8X3o1NmJ7rQ3GGEWAJX5GiDg613"
+    },
+    {
+      "address": "ASyDkPGpMHNkkJF4M45sjAMFjc6XB8xuQRg7xjEi31xq",
+      "symbol": "collectinu",
+      "scanned_at": "2026-09-10T17:24:01.835493+00:00",
+      "liquidity_usd": 20159.2966,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/9Ma2o1uLyCnJxS9owhJdQPz6BzvdcTMDxZMS7RpEjxEa"
+    },
+    {
+      "address": "7LxqrTgAPyCHoABSezku8TzCLKhowpDk9Y9MB2Scpump",
+      "symbol": "BlueCap",
+      "scanned_at": "2026-09-10T17:24:00.968690+00:00",
+      "liquidity_usd": 445.1729,
+      "score": 34,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/GwXbQ9dPDVgFTpvSR1zsLKrZn7EnaQkvchiji8vTHCiB"
+    },
+    {
+      "address": "8uFQntaPzfu9aS6AP18VDRZ8AfzsSWgH62cdaygAWWKP",
+      "symbol": "FLY",
+      "scanned_at": "2026-09-10T17:23:59.984122+00:00",
+      "liquidity_usd": 2547.2686,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/92ukXYk2sPceEab8gnBttwCyWW3RymPB6wMehNtGnoAc"
+    },
+    {
+      "address": "AiGfoXjjwraKzEtN4aHBTVrMKLyLrXoUNa4wPLJApump",
+      "symbol": "FLYFACE",
+      "scanned_at": "2026-09-10T17:23:59.119533+00:00",
+      "liquidity_usd": 2228.2215,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/J8j27p7YQ15cqamh7fSjR946DtwL451QCfSu6yoHQZk9"
+    },
+    {
+      "address": "97a6dWMUSws1yk6akt4fN8R189x7ARNNuZbqno2Apump",
+      "symbol": "sol",
+      "scanned_at": "2026-09-10T17:23:58.240558+00:00",
+      "liquidity_usd": 208.1551,
+      "score": 34,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/566ovWFs4n3hyghN7pATXiVMMFKYaHvi8gXB32b2AtAN"
+    },
+    {
+      "address": "AGFqBP9mWXtiTUh2yo7VaVjqYyQ7DKHABWw7SehGpump",
+      "symbol": "Pudgy Poll",
+      "scanned_at": "2026-09-10T17:23:57.312762+00:00",
+      "liquidity_usd": 2232.5546,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/E5PdsgE6XXRjFjD2RkKfedB7HBXnRmDTnHLRnBpjM8fr"
+    },
+    {
+      "address": "AgbhJr4xRh2NyjMx6dMAkh2Er9VWoTB1Sw42AU7npump",
+      "symbol": "Yode",
+      "scanned_at": "2026-09-10T17:23:56.404267+00:00",
+      "liquidity_usd": 2267.6732,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/FwrzqKLABmZaX3MFrVBpcMvcgZimUDxn59Mz97BCnhF9"
+    },
+    {
+      "address": "HUQYbuUbyHFNmV3UGEA9GPBme5o5HjCmom4yUdkipump",
+      "symbol": "sol",
+      "scanned_at": "2026-09-10T17:23:55.506182+00:00",
+      "liquidity_usd": 3800.4351,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/AagVPkvnsCQKXu3WeyEdE9YRZ9eAtoN8tnmNp73Pr2aA"
+    },
+    {
+      "address": "2Ygcj8L4qP9gBqPnDMi9RHrJ665BjUQEdPr1LEfXpump",
+      "symbol": "SOLSTONK",
+      "scanned_at": "2026-09-10T17:23:54.479646+00:00",
+      "liquidity_usd": 7705.1037,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/E3d93hnZUZYF87BhncyuN2cbSWTAbWmwk8L2cUsN7eYN"
+    },
+    {
+      "address": "8MDV7Nw7AdMbSUJJL3MLKLEhmvvTNgLVdm3PDYbYSpFo",
+      "symbol": "FREYACAT",
+      "scanned_at": "2026-09-10T17:23:53.491855+00:00",
+      "liquidity_usd": 2843.2843,
+      "score": 36,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/54e3L9tSmkNdzgUBcJ9k2g4i4aQvhn55PV1fRHN5sFhk"
+    },
+    {
+      "address": "8ksj9wu22o93Us6N9ChX87EM77UbNwQkBaC28aR1pump",
+      "symbol": "EPSTEIN⁠",
+      "scanned_at": "2026-09-10T17:23:52.491029+00:00",
+      "liquidity_usd": 1163.8846,
+      "score": 31,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/6yNdfxfp5PqPwcq7uWjbomRUXfZ6QRDqHqvBBCUe86dA"
+    },
+    {
+      "address": "3cm5euTJydCPLEdhwKMzqvyGK1dRT16NhEyMBDrkpump",
+      "symbol": "GPT-LIVE-1",
+      "scanned_at": "2026-09-10T17:23:51.486891+00:00",
+      "liquidity_usd": 2397.58080950154,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/7eiqczECusAiCeTXYntuaJW4agbpCAgjyXmd2MqrNukC"
+    },
+    {
+      "address": "8v65BHYuJtsj9MBSv8n4y2vDcgHkngebaePeDvh9pump",
+      "symbol": "!",
+      "scanned_at": "2026-09-10T17:23:50.630015+00:00",
+      "liquidity_usd": 4405.0252,
+      "score": 32,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/FJaegmF2wrgkTGoC6wsVUUbadoYhTn3VCkeSm5zzb32o"
+    },
+    {
+      "address": "DbkU93v14iU7KGGjzw2FthiWWjtNFrCyXAxMBPnc8ray",
+      "symbol": "DEPCAT",
+      "scanned_at": "2026-09-10T17:23:49.661947+00:00",
+      "liquidity_usd": 2679.82750112672,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/FTbHDCMkRpYYUxjku7UtWtAdKHQDQVjiDSyr4NWoweJn"
+    },
+    {
+      "address": "BZktavt3G1cnDy9Fw7ji7KEcMSpK8KVHMsPnNVZdpump",
+      "symbol": "GAYceX",
+      "scanned_at": "2026-09-10T17:23:48.766951+00:00",
+      "liquidity_usd": 5501.2746,
+      "score": 32,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/HgH9xnJM7wcVXahdohnyLBPFAtJhWawajCc7UBnRNCrG"
+    },
+    {
+      "address": "7MCgYMzq3fov6oERdtTMAYbN2U9LZrrSYS1MBhjixZFr",
+      "symbol": "POLLY",
+      "scanned_at": "2026-09-10T17:23:47.887049+00:00",
+      "liquidity_usd": 1141.10123192159,
+      "score": 59,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/EMoCDYHCZaL1eAHPBbFdxrw1Ft4oGMfLjrjuEPjs7cZT"
+    },
+    {
+      "address": "2izfJ2Ws4F6BxUd3YEb8ZMB1sXiXpw6rQBVoofrPpump",
+      "symbol": "APEBATON",
+      "scanned_at": "2026-09-10T17:23:47.001820+00:00",
+      "liquidity_usd": 17435.4351,
+      "score": 78,
+      "risk_level": "NIEDRIG",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/E8TBbFvJMamonc7vxsmMvxe6nQoKoqi8XRrKY9Jy88fR"
+    },
+    {
+      "address": "7c43cnVXt3Xb3TFtAwJzhVAiaRco9vHSiCmbskW9pump",
+      "symbol": "KIRK",
+      "scanned_at": "2026-09-10T17:23:46.014567+00:00",
+      "liquidity_usd": 881.5577,
+      "score": 34,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/C56QdX9s3A63mSwthZDaG6qqiRVFCDzsrD9VLeG2CHhg"
+    },
+    {
+      "address": "Df59kB5nNhWuMsB1DqktGJNQq37AQhstAGy2mSb3pump",
+      "symbol": "Solana Sum",
+      "scanned_at": "2026-09-10T17:23:45.074008+00:00",
+      "liquidity_usd": 2256.4309,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/EoP7zSttBPCqGz7vRVsMabTTNratrME6ReUbJkpDodgh"
+    },
+    {
+      "address": "9E8Z43c9EH96iDkqPtffi9bgwxb3phKX7xPssG94pTLM",
+      "symbol": "TRUFFLEHOG",
+      "scanned_at": "2026-09-10T17:23:44.217314+00:00",
+      "liquidity_usd": 3194.9807,
+      "score": 36,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/9MBD1ipf9fiui3urid1VW5Aamd2RbcoxbbsHofauEzy2"
+    },
+    {
+      "address": "J83HcofycJ5UDKABA2RMCgDHSUWxWrCuJzrTQJFe5yLt",
+      "symbol": "Reachy",
+      "scanned_at": "2026-09-10T17:23:43.292236+00:00",
+      "liquidity_usd": 40063.8554,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/FiftD1wp92t9hZ8UWJTZYV3gHbXprKhVF2DYs5qaaCkg"
+    },
+    {
+      "address": "4FzcQdAwT6J5xGqnc53wteRMzzTZhKeW3wtEaoAopump",
+      "symbol": "WomenPepe",
+      "scanned_at": "2026-09-10T17:23:42.397280+00:00",
+      "liquidity_usd": 1640.0641,
+      "score": 31,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/7HzCuiobzK4pEhDqK1EVZR7HcfU5yCiVVidXobVkiDn2"
+    },
+    {
+      "address": "HunxjFQ1e2F876MhooZMYTHADuwdhEQ95d7UmN3Xij4w",
+      "symbol": "GCAT",
+      "scanned_at": "2026-09-10T17:23:41.439506+00:00",
+      "liquidity_usd": 18162.2872,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/84jqWL2hhb5BKY7eYaz6HxYuarb9aXJUT7cuaoKtqQ76"
+    },
+    {
+      "address": "AYoJbc3eAtnyjaaxUALcnzVeBBTbk4AUW8EqcCcJpump",
+      "symbol": "COLLECTIBLE",
+      "scanned_at": "2026-09-10T17:23:40.557924+00:00",
+      "liquidity_usd": 2890.1295,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/5zN4SZ4vy7WrzGtsiazpRyJxZVucVL7vWY59u2vvhzG3"
+    },
+    {
+      "address": "HTeVuuLCLKacNgsEmAJNGESMAVrdo2azHxPVQrPpump",
+      "symbol": "AC",
+      "scanned_at": "2026-09-10T17:23:39.530730+00:00",
+      "liquidity_usd": 2215.60580944397,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/74sab4CAoPbht2d2HL9bzDUUazJfpadm9StRiim9WBdf"
+    },
+    {
+      "address": "FZn3zwfRFiYFNKA6AytfuAiRMmp3Un5YetNgs4abpump",
+      "symbol": "AC",
+      "scanned_at": "2026-09-10T17:23:38.648075+00:00",
+      "liquidity_usd": 2215.60580944397,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/ZsfcTD7kdfFGVvw3Mn1sfkkzHAXurm7dW1EbrZejD27"
+    },
+    {
+      "address": "Db6EfkBHUovnH6xkR5miJi2hqVKGzgJ5TCz5A2yjpump",
+      "symbol": "AC",
+      "scanned_at": "2026-09-10T17:23:37.762650+00:00",
+      "liquidity_usd": 2214.97364258789,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/5kMChXsTZFQHcGx2a7G1RrF8tUpci7jHTJgYEZ5552Qi"
+    },
+    {
+      "address": "HLjApHARUNy9DSADTiTGdSS7VcDrUhSZquFxQUdx265w",
+      "symbol": "MINER",
+      "scanned_at": "2026-09-10T17:23:36.879292+00:00",
+      "liquidity_usd": 18436.983,
+      "score": 48,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/AfvAXDc5i76va1fzvz6nSwtqP78DbS2CtJm7b737TTij"
+    },
+    {
+      "address": "GWyqQPTvRnUECRWiDZ4EbFNdMBRbVwvCZ2uskiZUpump",
+      "symbol": "AC",
+      "scanned_at": "2026-09-10T17:23:36.048297+00:00",
+      "liquidity_usd": 2214.78546486682,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/Cd6BXWitdJ7Vy3dDmeApy2huS5PVCRMUyS6QwmxtFsh2"
+    },
+    {
+      "address": "GrJbrrRXRAE9tHzbYVDwv6dZFK6DmLV1VgXkusYZpump",
+      "symbol": "AC",
+      "scanned_at": "2026-09-10T17:23:35.048084+00:00",
+      "liquidity_usd": 2215.2008602388,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/DHGN6sKS2decdbbpCZmHwRikJriFxd8s3h54ptsrjfNs"
+    },
+    {
+      "address": "EtDJtVonCCAkdY1qRSxKRqxqCCkTnNH9xm3bUzzApump",
+      "symbol": "AC",
+      "scanned_at": "2026-09-10T17:23:34.179767+00:00",
+      "liquidity_usd": 2216.96416959165,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/65QPsumY2byhMU8vkwa4SXAJGqcGRJ5gJpbujJkCN3SJ"
+    },
+    {
+      "address": "FKm4M2GLy6eP3KTzg7B4YQNqyjRQLaQoZdsejxW3pump",
+      "symbol": "SONELON",
+      "scanned_at": "2026-09-10T17:23:33.316076+00:00",
+      "liquidity_usd": 2866.54415269371,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/nyuidzM8nas8LkAnyccmraEnsXW5cGeajpGBxov4Gad"
+    },
+    {
+      "address": "ERo5gC3Rk8jsxpSSzGxrHUdT4PEWwWtBt8vSVndVC6oR",
+      "symbol": "BEANS",
+      "scanned_at": "2026-09-10T17:23:32.344191+00:00",
+      "liquidity_usd": 3576.01929274512,
+      "score": 36,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/8mbqfaFWChR5oD7QtWS6wqFWuMsmnncnLYuFDKdyzQqB"
+    },
+    {
+      "address": "J96z896kcKcNrbeq4DfcZ7ZVVs1jv1JxyjBuzoQvpump",
+      "symbol": "$CATSEM",
+      "scanned_at": "2026-09-10T17:23:31.380763+00:00",
+      "liquidity_usd": 2258.48026949141,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/7Qppm7WVMvQD98PsMorJwWkW2vawz535mfBBwin6iFFc"
+    },
+    {
+      "address": "8cHiPPrjaanfem3ZygLA8U6iGonT56JeB73fStTKpump",
+      "symbol": "Reachy",
+      "scanned_at": "2026-09-10T17:23:30.482124+00:00",
+      "liquidity_usd": 2273.10081940655,
+      "score": 38,
+      "risk_level": "HOCH",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/7ZjBB1Dt5fFjs6d9cKizQ1Fvc7U8rk338XtFR1tw9Rvo"
+    }
+  ],
+  "recent_alerts": [
+    {
+      "address": "2izfJ2Ws4F6BxUd3YEb8ZMB1sXiXpw6rQBVoofrPpump",
+      "symbol": "APEBATON",
+      "alerted_at": "2026-09-10T17:24:24.884890+00:00",
+      "kind": "alert",
+      "score": 78,
+      "risk_level": "NIEDRIG",
+      "chart_url": "https://www.geckoterminal.com/solana/pools/E8TBbFvJMamonc7vxsmMvxe6nQoKoqi8XRrKY9Jy88fR"
+    }
+  ],
+  "paper_trading": {
+    "open_positions": [
+      {
+        "address": "2izfJ2Ws4F6BxUd3YEb8ZMB1sXiXpw6rQBVoofrPpump",
+        "symbol": "APEBATON",
+        "entry_at": "2026-09-10T17:24:24.909672+00:00",
+        "entry_price": 4.935799457318109e-05,
+        "entry_score": 78,
+        "entry_risk_level": "NIEDRIG",
+        "status": "OPEN",
+        "exit_at": null,
+        "exit_price": null,
+        "exit_reason": null,
+        "pnl_percent": null,
+        "pnl_usd": null
+      }
+    ],
+    "closed_trades": [],
+    "summary": {
+      "count": 0,
+      "win_rate_percent": 0.0,
+      "total_pnl_usd": 0.0,
+      "avg_pnl_percent": 0.0
+    }
+  }
+}

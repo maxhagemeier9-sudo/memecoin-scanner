@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memecoin Scanner Dashboard</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --panel-border: #232838;
+    --text: #e8eaf0;
+    --text-dim: #8890a4;
+    --accent: #5b9dff;
+    --green: #3ecf8e;
+    --yellow: #e0b84c;
+    --orange: #e08a3c;
+    --red: #e0563c;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f5f8;
+      --panel: #ffffff;
+      --panel-border: #e2e5ec;
+      --text: #171a21;
+      --text-dim: #666e7f;
+    }
+  }
+  [data-theme="light"] {
+    --bg: #f4f5f8; --panel: #ffffff; --panel-border: #e2e5ec; --text: #171a21; --text-dim: #666e7f;
+  }
+  [data-theme="dark"] {
+    --bg: #0b0d12; --panel: #12151c; --panel-border: #232838; --text: #e8eaf0; --text-dim: #8890a4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 20px 16px 60px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; margin-bottom: 20px;
+  }
+  h1 { font-size: 20px; margin: 0; font-weight: 650; }
+  h2 { font-size: 15px; margin: 0 0 12px; font-weight: 650; color: var(--text); }
+  .meta { color: var(--text-dim); font-size: 12.5px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 5px; }
+  .dot.stale { background: var(--orange); }
+  button.theme-toggle {
+    background: var(--panel); border: 1px solid var(--panel-border); color: var(--text);
+    border-radius: 7px; padding: 5px 10px; font-size: 12.5px; cursor: pointer;
+  }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 22px; }
+  .tile {
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .tile .label { font-size: 11.5px; color: var(--text-dim); margin-bottom: 4px; }
+  .tile .value { font-size: 21px; font-weight: 650; }
+  .tile .value.green { color: var(--green); }
+  .tile .value.red { color: var(--red); }
+  section { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 16px; margin-bottom: 18px; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  input.filter {
+    background: var(--bg); border: 1px solid var(--panel-border); color: var(--text);
+    border-radius: 7px; padding: 6px 10px; font-size: 13px; width: 200px; max-width: 100%;
+  }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
+  th { text-align: left; color: var(--text-dim); font-weight: 600; font-size: 11.5px; text-transform: uppercase;
+       letter-spacing: .03em; padding: 6px 10px; border-bottom: 1px solid var(--panel-border); white-space: nowrap; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--panel-border); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 650; }
+  .badge.NIEDRIG { background: rgba(62,207,142,.15); color: var(--green); }
+  .badge.MITTEL { background: rgba(224,184,76,.18); color: var(--yellow); }
+  .badge.HOCH { background: rgba(224,138,60,.18); color: var(--orange); }
+  .badge.KRITISCH { background: rgba(224,86,60,.18); color: var(--red); }
+  .badge.alert { background: rgba(91,157,255,.15); color: var(--accent); }
+  .badge.rising { background: rgba(62,207,142,.15); color: var(--green); }
+  .pnl.pos { color: var(--green); font-weight: 650; }
+  .pnl.neg { color: var(--red); font-weight: 650; }
+  .empty { color: var(--text-dim); padding: 10px 2px; font-size: 13px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
+  svg.equity { width: 100%; height: 90px; display: block; }
+  .sym { font-weight: 600; }
+  .addr { color: var(--text-dim); font-size: 11.5px; }
+  footer { text-align: center; color: var(--text-dim); font-size: 12px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>🔍 Memecoin Scanner Dashboard</h1>
+    <div class="meta">
+      <span id="freshness"><span class="dot" id="freshness-dot"></span><span id="freshness-text">lädt…</span></span>
+      <button class="theme-toggle" id="theme-toggle">Theme</button>
+    </div>
+  </header>
+
+  <div class="tiles" id="stat-tiles"></div>
+
+  <div class="grid-2">
+    <section>
+      <div class="section-head"><h2>💰 Paper Trading</h2></div>
+      <div class="tiles" id="paper-tiles" style="margin-bottom:14px;"></div>
+      <svg class="equity" id="equity-curve" viewBox="0 0 300 90" preserveAspectRatio="none"></svg>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>📈 Offene Positionen</h2></div>
+      <div class="table-scroll"><table id="open-trades-table"><thead><tr>
+        <th>Symbol</th><th>Einstieg</th><th>Score</th><th>Risiko</th><th>Seit</th>
+      </tr></thead><tbody></tbody></table></div>
+      <div class="empty" id="open-trades-empty" hidden>Keine offenen Positionen.</div>
+    </section>
+  </div>
+
+  <section>
+    <div class="section-head"><h2>📝 Letzte geschlossene Trades</h2></div>
+    <div class="table-scroll"><table id="closed-trades-table"><thead><tr>
+      <th>Symbol</th><th>Grund</th><th>P&amp;L %</th><th>P&amp;L $</th><th>Geschlossen</th>
+    </tr></thead><tbody></tbody></table></div>
+    <div class="empty" id="closed-trades-empty" hidden>Noch keine geschlossenen Trades.</div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>🚨 Letzte Alerts</h2></div>
+    <div class="table-scroll"><table id="alerts-table"><thead><tr>
+      <th>Typ</th><th>Symbol</th><th>Score</th><th>Risiko</th><th>Zeit</th><th>Chart</th>
+    </tr></thead><tbody></tbody></table></div>
+    <div class="empty" id="alerts-empty" hidden>Noch keine Alerts.</div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>🕓 Zuletzt gescannt</h2>
+      <input class="filter" id="scan-filter" placeholder="Symbol/Adresse filtern…">
+    </div>
+    <div class="table-scroll"><table id="scans-table"><thead><tr>
+      <th>Symbol</th><th>Score</th><th>Risiko</th><th>Liquidität</th><th>Zeit</th><th>Chart</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <footer>Aktualisiert sich automatisch alle 45s · Daten kommen direkt nach jedem CI-Scan (~alle 10 Min)</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var THEME_KEY = "dashboard-theme";
+  var savedTheme = localStorage.getItem(THEME_KEY);
+  if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+
+  document.getElementById("theme-toggle").addEventListener("click", function () {
+    var explicit = document.documentElement.getAttribute("data-theme");
+    var effective = explicit || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    var next = effective === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem(THEME_KEY, next);
+  });
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function fmtUsd(n) {
+    if (n == null) return "?";
+    return "$" + Number(n).toLocaleString("de-DE", { maximumFractionDigits: n < 1 ? 6 : 0 });
+  }
+
+  function relTime(iso) {
+    if (!iso) return "?";
+    var then = new Date(iso).getTime();
+    if (isNaN(then)) return "?";
+    var diffSec = Math.round((Date.now() - then) / 1000);
+    if (diffSec < 5) return "gerade eben";
+    if (diffSec < 60) return diffSec + "s her";
+    var min = Math.round(diffSec / 60);
+    if (min < 60) return min + " Min her";
+    var h = Math.round(min / 60);
+    if (h < 48) return h + " Std her";
+    return Math.round(h / 24) + " Tage her";
+  }
+
+  function chartLink(url) {
+    return url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Chart ↗</a>' : "";
+  }
+
+  function riskBadge(level) {
+    if (!level) return "";
+    return '<span class="badge ' + escapeHtml(level) + '">' + escapeHtml(level) + "</span>";
+  }
+
+  function tile(label, value, cls) {
+    return '<div class="tile"><div class="label">' + escapeHtml(label) + '</div>' +
+      '<div class="value' + (cls ? " " + cls : "") + '">' + value + "</div></div>";
+  }
+
+  function renderStats(stats) {
+    var counts = stats.risk_level_counts || {};
+    document.getElementById("stat-tiles").innerHTML = [
+      tile("Snapshots gesamt", stats.total_snapshots),
+      tile("Coins getrackt", stats.total_unique_coins),
+      tile("Alerts gesamt", stats.total_alerts),
+      tile("Rising Alerts", stats.total_rising_alerts),
+      tile("Zuletzt NIEDRIG", counts.NIEDRIG || 0, "green"),
+      tile("Zuletzt KRITISCH", counts.KRITISCH || 0, counts.KRITISCH ? "red" : ""),
+    ].join("");
+  }
+
+  function renderPaperTiles(pt) {
+    var s = pt.summary || {};
+    var open = pt.open_positions || [];
+    var pnlCls = (s.total_pnl_usd || 0) >= 0 ? "green" : "red";
+    document.getElementById("paper-tiles").innerHTML = [
+      tile("Offen", open.length),
+      tile("Geschlossen", s.count || 0),
+      tile("Win-Rate", (s.win_rate_percent || 0).toFixed(0) + "%"),
+      tile("Ø P&L", (s.avg_pnl_percent || 0).toFixed(1) + "%"),
+      tile("Gesamt-P&L", fmtUsd(s.total_pnl_usd || 0), pnlCls),
+    ].join("");
+  }
+
+  function renderEquityCurve(closedTrades) {
+    var svg = document.getElementById("equity-curve");
+    if (!closedTrades.length) { svg.innerHTML = ""; return; }
+    var cum = 0;
+    var points = closedTrades.map(function (t) {
+      cum += (t.pnl_usd || 0);
+      return cum;
+    });
+    var min = Math.min(0, points.reduce(function (a, b) { return Math.min(a, b); }, 0));
+    var max = Math.max(0, points.reduce(function (a, b) { return Math.max(a, b); }, 0));
+    var range = (max - min) || 1;
+    var w = 300, h = 90, pad = 4;
+    var step = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
+    var path = points.map(function (v, i) {
+      var x = pad + i * step;
+      var y = h - pad - ((v - min) / range) * (h - pad * 2);
+      return (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+    }).join(" ");
+    var zeroY = h - pad - ((0 - min) / range) * (h - pad * 2);
+    var color = cum >= 0 ? "#3ecf8e" : "#e0563c";
+    svg.innerHTML =
+      '<line x1="0" y1="' + zeroY.toFixed(1) + '" x2="' + w + '" y2="' + zeroY.toFixed(1) + '" stroke="currentColor" stroke-opacity="0.15" stroke-dasharray="3,3"/>' +
+      '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+  }
+
+  function renderOpenTrades(trades) {
+    var tbody = document.querySelector("#open-trades-table tbody");
+    document.getElementById("open-trades-empty").hidden = trades.length > 0;
+    tbody.innerHTML = trades.map(function (t) {
+      return "<tr><td class='sym'>" + escapeHtml(t.symbol) + "</td>" +
+        "<td>" + fmtUsd(t.entry_price) + "</td>" +
+        "<td>" + t.entry_score + "</td>" +
+        "<td>" + riskBadge(t.entry_risk_level) + "</td>" +
+        "<td>" + relTime(t.entry_at) + "</td></tr>";
+    }).join("");
+  }
+
+  function renderClosedTrades(trades) {
+    var tbody = document.querySelector("#closed-trades-table tbody");
+    document.getElementById("closed-trades-empty").hidden = trades.length > 0;
+    var reversed = trades.slice().reverse();
+    tbody.innerHTML = reversed.map(function (t) {
+      var pnlCls = (t.pnl_percent || 0) >= 0 ? "pos" : "neg";
+      return "<tr><td class='sym'>" + escapeHtml(t.symbol) + "</td>" +
+        "<td>" + escapeHtml(t.exit_reason) + "</td>" +
+        "<td class='pnl " + pnlCls + "'>" + (t.pnl_percent || 0).toFixed(0) + "%</td>" +
+        "<td class='pnl " + pnlCls + "'>" + fmtUsd(t.pnl_usd) + "</td>" +
+        "<td>" + relTime(t.exit_at) + "</td></tr>";
+    }).join("");
+    renderEquityCurve(trades);
+  }
+
+  function renderAlerts(alerts) {
+    var tbody = document.querySelector("#alerts-table tbody");
+    document.getElementById("alerts-empty").hidden = alerts.length > 0;
+    tbody.innerHTML = alerts.map(function (a) {
+      return "<tr><td><span class='badge " + a.kind + "'>" + (a.kind === "rising" ? "Rising" : "Alert") + "</span></td>" +
+        "<td class='sym'>" + escapeHtml(a.symbol) + "</td>" +
+        "<td>" + (a.score != null ? a.score : "?") + "</td>" +
+        "<td>" + riskBadge(a.risk_level) + "</td>" +
+        "<td>" + relTime(a.alerted_at) + "</td>" +
+        "<td>" + chartLink(a.chart_url) + "</td></tr>";
+    }).join("");
+  }
+
+  var allScans = [];
+  function renderScans(scans) {
+    var tbody = document.querySelector("#scans-table tbody");
+    var filterVal = document.getElementById("scan-filter").value.trim().toLowerCase();
+    var filtered = !filterVal ? scans : scans.filter(function (s) {
+      return (s.symbol || "").toLowerCase().indexOf(filterVal) !== -1 ||
+             (s.address || "").toLowerCase().indexOf(filterVal) !== -1;
+    });
+    tbody.innerHTML = filtered.map(function (s) {
+      return "<tr><td class='sym'>" + escapeHtml(s.symbol) +
+        "<div class='addr'>" + escapeHtml((s.address || "").slice(0, 8)) + "…</div></td>" +
+        "<td>" + s.score + "</td>" +
+        "<td>" + riskBadge(s.risk_level) + "</td>" +
+        "<td>" + fmtUsd(s.liquidity_usd) + "</td>" +
+        "<td>" + relTime(s.scanned_at) + "</td>" +
+        "<td>" + chartLink(s.chart_url) + "</td></tr>";
+    }).join("");
+  }
+  document.getElementById("scan-filter").addEventListener("input", function () { renderScans(allScans); });
+
+  function renderFreshness(generatedAt) {
+    var dot = document.getElementById("freshness-dot");
+    var text = document.getElementById("freshness-text");
+    var ageMin = (Date.now() - new Date(generatedAt).getTime()) / 60000;
+    dot.className = "dot" + (ageMin > 20 ? " stale" : "");
+    text.textContent = "Letzter Scan: " + relTime(generatedAt);
+  }
+
+  var lastData = null;
+
+  function render(data) {
+    lastData = data;
+    renderFreshness(data.generated_at);
+    renderStats(data.stats || {});
+    renderPaperTiles(data.paper_trading || {});
+    renderOpenTrades((data.paper_trading || {}).open_positions || []);
+    renderClosedTrades((data.paper_trading || {}).closed_trades || []);
+    renderAlerts(data.recent_alerts || []);
+    allScans = data.recent_snapshots || [];
+    renderScans(allScans);
+  }
+
+  function load() {
+    fetch("data.json?_=" + Date.now())
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function (err) {
+        document.getElementById("freshness-text").textContent = "Daten konnten nicht geladen werden";
+        console.error(err);
+      });
+  }
+
+  load();
+  setInterval(load, 45000);
+  setInterval(function () { if (lastData) renderFreshness(lastData.generated_at); }, 15000);
+})();
+</script>
+</body>
+</html>

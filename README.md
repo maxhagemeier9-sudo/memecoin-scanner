@@ -34,6 +34,7 @@ Seit 2026-09-10 (Birdeye-Compute-Units-Kontingent bis 2026-10-08 erschöpft):
 | `monitor.py` | Dauerlauf-Modus (lokal), eröffnet/schließt Paper-Trades |
 | `ci_scan.py` | Einzelner Scan-Zyklus für zeitgesteuerte Trigger (GitHub Actions) |
 | `export.py` | CSV/JSON-Export der Ranking-Ergebnisse |
+| `dashboard_export.py` | Exportiert Historie + Paper-Trading-Stand als `docs/data.json` fürs Web-Dashboard |
 | `birdeye_client.py` / `filters.py` / `scanner.py` / `main.py` / `new_coins.py` | Dormant seit Kontingent-Erschöpfung, funktioniert wieder ab 2026-10-08 |
 
 ## Was geprüft wird
@@ -90,3 +91,17 @@ Pro Scan-Zyklus eröffnet Paper Trading nur eine Position - für den am höchste
 Alert-Kandidaten (Score) des jeweiligen Laufs, nicht für jeden einzelnen Alert. Einmal pro
 UTC-Kalendertag verschickt `paper_trading.maybe_send_daily_summary()` zusätzlich einen kurzen
 Performance-Report (offene/geschlossene Positionen, Win-Rate, Ø P&L, Gesamt-P&L) an Telegram.
+
+## Dashboard (GitHub Pages)
+
+`docs/index.html` ist ein eigenständiges Web-Dashboard (kein Node/Build-Step, reines HTML/CSS/JS)
+mit Ranking, offenen/geschlossenen Paper-Trades, einer P&L-Equity-Kurve, den letzten Alerts und
+einer filterbaren Liste aller zuletzt gescannten Coins - Light/Dark-Theme, auto-refresh alle 45s.
+Die Daten kommen aus `docs/data.json`, das `dashboard_export.py` als letzter CI-Schritt aus
+`history.sqlite3` neu schreibt und direkt per `actions/deploy-pages` veröffentlicht (kein
+Git-Commit pro Lauf, sonst würde die Historie mit einem Daten-Commit alle ~10 Minuten zumüllen).
+
+**Einmaliger manueller Schritt** (mein Token hat keine Administration-Berechtigung dafür):
+Settings → Pages → "Build and deployment" → Source: **GitHub Actions** auswählen. Danach ist das
+Dashboard unter `https://<username>.github.io/<repo>/` erreichbar und aktualisiert sich mit
+jedem Scan von selbst.
