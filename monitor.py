@@ -9,7 +9,12 @@ jeden Alert eine Paper-Trading-Position eröffnet, sondern nur für den am
 besten bewerteten Kandidaten (höchster Score) - so bleibt das Paper-Depot
 fokussiert auf das jeweils stärkste Signal statt bei jedem Treffer zu
 streuen. Alerts (Telegram) werden davon unabhängig weiterhin für jeden
-qualifizierenden Coin verschickt. Einmal täglich (anderes Stunden-Fenster
+qualifizierenden Coin verschickt. Coins mit dem striktesten Risiko-Level
+(NIEDRIG - keine einzige Auffälligkeit) bekommen zusätzlich eine SEPARATE
+"Verified-Signal"-Nachricht (siehe _send_verified_signal) - unser eigener,
+transparent nachvollziehbarer Ersatz für ein "Verified"-Badge einer
+Drittanbieter-App wie FOMO, für die keine öffentliche Coin-Verifizierungs-
+API gefunden wurde. Einmal täglich (anderes Stunden-Fenster
 als der Paper-Trading-Report) läuft außerdem ein begrenzter Backtest-Batch
 (siehe backtest.maybe_run_daily_backtest_batch) - testet reifgewordene
 Erstsichtungen gegen die echte Kursentwicklung zurück und speichert die
@@ -88,6 +93,23 @@ def _with_link(text: str, pool_address: str | None) -> str:
     return f"{text}\n{url}" if url else text
 
 
+def _send_verified_signal(assessment: TokenAssessment, address: str) -> None:
+    """Eigener, transparent nachvollziehbarer Ersatz für ein "Verified"-Badge
+    einer Drittanbieter-Trading-App (z.B. FOMO) - dort ist nicht einsehbar,
+    wonach genau verifiziert wird oder ob sich das automatisieren lässt (bei
+    FOMO z.B. keine öffentliche API für Coin-Verifizierung gefunden). Unser
+    NIEDRIG-Risiko-Level ist dagegen die Summe aller in risk.py geprüften,
+    einzeln nachvollziehbaren Kriterien (Mint-/Freeze-Authority, Liquiditäts-
+    Sperre, Holder-Konzentration, Creator-Reputation, ...). Bewusst eine
+    SEPARATE Telegram-Nachricht, nicht Teil des regulären Alert-Texts, damit
+    sie sich klar von den übrigen Alerts abhebt."""
+    alert(_with_link(
+        f"✅ Eigenes Verified-Signal: {assessment.report.symbol} - Score {assessment.score.total}/100, "
+        f"keine Risiko-Findings ({address})",
+        assessment.pool_address,
+    ))
+
+
 def _should_alert(assessment: TokenAssessment) -> bool:
     """Alarmiert entweder bei hohem Score ODER bei höchstens mittlerem Risiko,
     unabhängig vom genauen Score. Reine Score>=70-Coins sind bei ganz frischen
@@ -131,6 +153,8 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
                 assessment.pool_address,
             ))
             history.mark_alerted(conn, address)
+            if assessment.report.overall == Severity.NIEDRIG:
+                _send_verified_signal(assessment, address)
             if best_candidate is None or assessment.score.total > best_candidate.score.total:
                 best_candidate = assessment
 

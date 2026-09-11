@@ -71,6 +71,14 @@ Jede Telegram-Nachricht (Scan-Zusammenfassung, reguläre Alerts, Rising-Coin-Ale
 sofern eine Pool-Adresse bekannt ist, einen direkten Link zur Chart-Ansicht auf GeckoTerminal
 (`risk_scan.pool_url`) - zum schnellen Gegenchecken von Hype/FOMO direkt aus der Nachricht heraus.
 
+**"Verified-Signal":** Neu entdeckte Coins mit dem striktesten Risiko-Level (NIEDRIG - keine
+einzige Auffälligkeit) bekommen zusätzlich eine SEPARATE Telegram-Nachricht (siehe
+`monitor._send_verified_signal`) - unser eigener, transparent nachvollziehbarer Ersatz für ein
+"Verified"-Badge einer Drittanbieter-Trading-App (z.B. FOMO): dort ist nicht einsehbar, wonach
+überhaupt verifiziert wird, und es gibt keine öffentliche API, um das automatisiert abzufragen
+(recherchiert 2026-09-11). Nur für neu entdeckte Coins (`scan_new_coins`), nicht für die
+Rising-Watchlist.
+
 ## Lokal einrichten
 
 ```bash

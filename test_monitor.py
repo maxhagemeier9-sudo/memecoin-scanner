@@ -79,8 +79,9 @@ def test_high_score_triggers_alert(mock_scan, mock_alert, mock_send):
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
-        mock_alert.assert_called_once()
-        assert "HOT" in mock_alert.call_args[0][0]
+        # keine Findings -> NIEDRIG -> regulaerer Alert + separates Verified-Signal
+        assert mock_alert.call_count == 2
+        assert "HOT" in mock_alert.call_args_list[0].args[0]
     finally:
         conn.close()
 
@@ -161,7 +162,38 @@ def test_niedrig_risk_alerts_even_with_low_score(mock_scan, mock_alert, mock_sen
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
-        mock_alert.assert_called_once()
+        assert mock_alert.call_count == 2  # regulaerer Alert + separates Verified-Signal
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_niedrig_risk_coin_gets_a_separate_verified_signal_message(mock_scan, mock_alert, mock_send):
+    mock_scan.side_effect = _fake_scan([_result("SAFE", "addr1", 80)])  # keine Findings -> NIEDRIG
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        assert mock_alert.call_count == 2
+        verified_calls = [c for c in mock_alert.call_args_list if "Verified-Signal" in c.args[0]]
+        assert len(verified_calls) == 1
+        assert "SAFE" in verified_calls[0].args[0]
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_mittel_risk_coin_does_not_get_a_verified_signal_message(mock_scan, mock_alert, mock_send):
+    findings = [RiskFinding(Severity.MITTEL, "Nur 40 Holder insgesamt")]
+    mock_scan.side_effect = _fake_scan([_result("MID", "addr1", 45, findings=findings)])
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        assert mock_alert.call_count == 1  # nur der reguläre Alert, kein Verified-Signal
+        assert "Verified-Signal" not in mock_alert.call_args[0][0]
     finally:
         conn.close()
 
@@ -208,7 +240,9 @@ def test_alert_dedup_survives_a_fresh_connection_to_the_same_db_file(mock_scan, 
     conn2 = connect(db_path=str(db_path))
     try:
         scan_once(client=object(), conn=conn2)
-        assert mock_alert.call_count == 1  # nicht beim zweiten Mal erneut alarmiert
+        # keine Findings -> NIEDRIG -> regulaerer Alert + Verified-Signal, aber NUR beim ersten
+        # Mal (conn1) - beim zweiten Mal (conn2, gleiche DB-Datei) nicht erneut alarmiert
+        assert mock_alert.call_count == 2
     finally:
         conn2.close()
 
@@ -257,6 +291,26 @@ def test_rising_coin_triggers_a_separate_alert(mock_scan, mock_alert, mock_reche
         mock_alert.assert_called_once()
         assert "Rising Coin" in mock_alert.call_args[0][0]
         assert "addr1" in mock_alert.call_args[0][0]
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_rising_coin_never_gets_a_verified_signal_even_at_niedrig_risk(mock_scan, mock_alert, mock_recheck, mock_send):
+    # Verified-Signal ist bewusst nur fuer NEU entdeckte Coins (scan_new_coins),
+    # nicht fuer die Rising-Watchlist (schon vorher bekannte Coins)
+    mock_scan.return_value = []
+    mock_recheck.side_effect = _fake_recheck(
+        [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0, overall=Severity.NIEDRIG))]
+    )
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        assert mock_alert.call_count == 1
+        assert "Verified-Signal" not in mock_alert.call_args[0][0]
     finally:
         conn.close()
 
