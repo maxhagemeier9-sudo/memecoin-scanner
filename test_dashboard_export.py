@@ -135,3 +135,78 @@ def test_empty_database_produces_valid_empty_structure(conn):
     assert data["paper_trading"]["open_positions"] == []
     assert data["paper_trading"]["closed_trades"] == []
     assert data["stats"]["total_snapshots"] == 0
+    assert data["creator_wallets"] == []
+
+
+def test_creator_wallets_lists_serial_launchers_with_at_least_two_coins(conn):
+    record_snapshot(conn, _snapshot(address="a1", symbol="C1", creator_authority="creatorX"))
+    record_snapshot(conn, _snapshot(address="a2", symbol="C2", creator_authority="creatorX"))
+    # nur ein Coin -> KEIN Serial-Launcher, taucht nicht auf
+    record_snapshot(conn, _snapshot(address="a3", symbol="SOLO", creator_authority="creatorY"))
+
+    data = build_dashboard_data(conn)
+
+    creators = {w["creator_authority"] for w in data["creator_wallets"]}
+    assert creators == {"creatorX"}
+    wallet = data["creator_wallets"][0]
+    assert wallet["coin_count"] == 2
+    assert {c["symbol"] for c in wallet["coins"]} == {"C1", "C2"}
+
+
+def test_creator_wallets_detects_a_rugged_coin(conn):
+    record_snapshot(conn, _snapshot(
+        address="a1", symbol="RUGGED", creator_authority="creatorX",
+        scanned_at="2026-09-11T08:00:00+00:00", liquidity_usd=10_000.0,
+    ))
+    record_snapshot(conn, _snapshot(
+        address="a1", symbol="RUGGED", creator_authority="creatorX",
+        scanned_at="2026-09-11T09:00:00+00:00", liquidity_usd=100.0,  # -99%
+    ))
+    record_snapshot(conn, _snapshot(address="a2", symbol="OK", creator_authority="creatorX"))
+
+    data = build_dashboard_data(conn)
+
+    wallet = data["creator_wallets"][0]
+    assert wallet["rugged_count"] == 1
+    rugged_coin = next(c for c in wallet["coins"] if c["symbol"] == "RUGGED")
+    assert rugged_coin["rugged"] is True
+    ok_coin = next(c for c in wallet["coins"] if c["symbol"] == "OK")
+    assert ok_coin["rugged"] is False
+
+
+def test_creator_wallets_excludes_implausibly_high_coin_counts(conn):
+    # simuliert einen geteilten Platzhalter-Wert statt einer echten Wallet
+    for i in range(60):
+        record_snapshot(conn, _snapshot(address=f"a{i}", symbol=f"C{i}", creator_authority="sharedPlaceholder"))
+    record_snapshot(conn, _snapshot(address="b1", symbol="B1", creator_authority="realCreator"))
+    record_snapshot(conn, _snapshot(address="b2", symbol="B2", creator_authority="realCreator"))
+
+    data = build_dashboard_data(conn)
+
+    creators = {w["creator_authority"] for w in data["creator_wallets"]}
+    assert "sharedPlaceholder" not in creators
+    assert "realCreator" in creators
+
+
+def test_creator_wallets_sorts_by_rugged_count_first():
+    conn = connect(db_path=":memory:")
+    try:
+        # creatorA: 2 Coins, 0 gerugged
+        record_snapshot(conn, _snapshot(address="a1", symbol="A1", creator_authority="creatorA"))
+        record_snapshot(conn, _snapshot(address="a2", symbol="A2", creator_authority="creatorA"))
+        # creatorB: 2 Coins, 1 gerugged
+        record_snapshot(conn, _snapshot(
+            address="b1", symbol="B1", creator_authority="creatorB",
+            scanned_at="2026-09-11T08:00:00+00:00", liquidity_usd=10_000.0,
+        ))
+        record_snapshot(conn, _snapshot(
+            address="b1", symbol="B1", creator_authority="creatorB",
+            scanned_at="2026-09-11T09:00:00+00:00", liquidity_usd=50.0,
+        ))
+        record_snapshot(conn, _snapshot(address="b2", symbol="B2", creator_authority="creatorB"))
+
+        data = build_dashboard_data(conn)
+
+        assert data["creator_wallets"][0]["creator_authority"] == "creatorB"
+    finally:
+        conn.close()

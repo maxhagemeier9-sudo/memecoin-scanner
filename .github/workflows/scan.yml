@@ -84,3 +84,15 @@ jobs:
         with:
           path: history.sqlite3
           key: history-db-${{ github.run_id }}
+
+      - name: Meta-Alarm bei fehlgeschlagenem Lauf
+        # Bewusst reines curl statt Python: wenn der Lauf wegen eines Bugs im
+        # eigenen Code fehlschlaegt, soll genau DAS Problem nicht auch noch
+        # diesen Alarm verhindern. Laeuft unabhaengig davon, welcher vorherige
+        # Schritt fehlgeschlagen ist (if: failure() greift bei JEDEM Fehler
+        # im Job, nicht nur beim letzten Schritt).
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=⚠️ Scan-Lauf #${{ github.run_number }} fehlgeschlagen. Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

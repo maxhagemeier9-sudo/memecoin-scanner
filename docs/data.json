@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-11T11:06:47.100488+00:00",
+  "generated_at": "2026-09-11T12:30:20.229303+00:00",
   "stats": {
     "total_snapshots": 442,
     "total_unique_coins": 381,
@@ -593,5 +593,57 @@
   "backtest": {
     "total_backtested": 0,
     "by_risk_level": {}
-  }
+  },
+  "creator_wallets": [
+    {
+      "creator_authority": "B4dG1P9naXUBpNJMdg5NMQcB4U796gSQ2fG8hiSiN81f",
+      "coin_count": 3,
+      "rugged_count": 0,
+      "coins": [
+        {
+          "address": "36YdVMwZ6EK4D87L9YwQFD2m2u8okFwP5dbSRMZ4dHYT",
+          "symbol": "SSE",
+          "rugged": false,
+          "chart_url": "https://www.geckoterminal.com/solana/pools/35YDR7neHR2pGdV3wEo6PqK1EeJ51byLV1Vs82sKhj8A"
+        },
+        {
+          "address": "9cbixHi1GYLb7X5D1hhj88a1WAz4c9EzT2Kb3kzSxrkp",
+          "symbol": "???",
+          "rugged": false,
+          "chart_url": null
+        },
+        {
+          "address": "G5xwBrVmb2QWjDq3WzbksK5dBme8EHECXXP8WxdxUZhi",
+          "symbol": "IBM",
+          "rugged": false,
+          "chart_url": null
+        }
+      ]
+    },
+    {
+      "creator_authority": "TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM",
+      "coin_count": 3,
+      "rugged_count": 0,
+      "coins": [
+        {
+          "address": "AEALtMhapE5zp3FZ2DmjSGFL3yEorA3kaXGbA7qYpump",
+          "symbol": "Aichipgo",
+          "rugged": false,
+          "chart_url": null
+        },
+        {
+          "address": "CwW2YGEKwAeWifgi8mt5s3S1BGpjTK8eDr26pLagbonk",
+          "symbol": "???",
+          "rugged": false,
+          "chart_url": null
+        },
+        {
+          "address": "eeURiHBEv439vvz5ufGYu4KyXDgVddYpqbCfChxBAGS",
+          "symbol": "Oilbal",
+          "rugged": false,
+          "chart_url": "https://www.geckoterminal.com/solana/pools/3A9i4Xgk9XiJMXDqHbWndcZr9C8dpQS6Miw7ULn8AVbk"
+        }
+      ]
+    }
+  ]
 }

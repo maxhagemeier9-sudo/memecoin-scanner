@@ -72,6 +72,14 @@ class RiskThresholds:
     # bereits von derselben Creator-Wallet (Token-2022 updateAuthority) stammen
     serial_launcher_count_high: int = 5
     serial_launcher_count_medium: int = 2
+    # Live verifiziert (2026-09-11): manche updateAuthority-Werte sind gar
+    # keine echten Wallets, sondern ein gemeinsamer Platzhalter, den ein
+    # Launch-Tool bei sehr vielen Coins gleich setzt (ein Fall hatte 142
+    # Coins auf eine Adresse, die auf der Chain gar nicht existiert) - über
+    # dieser Schwelle wird previous_coin_count NICHT mehr als individuelles
+    # Serial-Launcher-Signal gewertet, weil es strukturell kein einzelner
+    # Akteur mehr sein kann.
+    serial_launcher_implausible_count: int = 50
     # Liquiditäts-Einbruch seit dem letzten Scan derselben Adresse, in Prozent
     liquidity_crash_percent_high: float = 50.0
     liquidity_crash_percent_medium: float = 20.0

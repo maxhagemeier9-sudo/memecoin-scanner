@@ -153,6 +153,16 @@
   </section>
 
   <section>
+    <div class="section-head"><h2>🏭 Serial-Launcher-Wallets</h2></div>
+    <div class="table-scroll"><table id="creators-table"><thead><tr>
+      <th>Creator-Wallet</th><th>Coins</th><th>Davon gerugged</th><th>Coins im Detail</th>
+    </tr></thead><tbody></tbody></table></div>
+    <div class="empty" id="creators-empty" hidden>
+      Noch keine Wallet mit mehr als einem bekannten Coin.
+    </div>
+  </section>
+
+  <section>
     <div class="section-head">
       <h2>🕓 Zuletzt gescannt</h2>
       <input class="filter" id="scan-filter" placeholder="Symbol/Adresse filtern…">
@@ -327,6 +337,23 @@
     }).join("");
   }
 
+  function renderCreators(wallets) {
+    var tbody = document.querySelector("#creators-table tbody");
+    document.getElementById("creators-empty").hidden = wallets.length > 0;
+    tbody.innerHTML = wallets.map(function (w) {
+      var coinsHtml = w.coins.map(function (c) {
+        var text = (c.rugged ? "🔴 " : "🟢 ") + escapeHtml(c.symbol);
+        return c.chart_url
+          ? "<a href=\"" + escapeHtml(c.chart_url) + "\" target=\"_blank\" rel=\"noopener\">" + text + "</a>"
+          : text;
+      }).join(", ");
+      return "<tr><td class='addr'>" + escapeHtml(w.creator_authority.slice(0, 8)) + "…</td>" +
+        "<td>" + w.coin_count + "</td>" +
+        "<td" + (w.rugged_count > 0 ? " class='pnl neg'" : "") + ">" + w.rugged_count + "</td>" +
+        "<td>" + coinsHtml + "</td></tr>";
+    }).join("");
+  }
+
   var allScans = [];
   function renderScans(scans) {
     var tbody = document.querySelector("#scans-table tbody");
@@ -366,6 +393,7 @@
     renderClosedTrades((data.paper_trading || {}).closed_trades || []);
     renderAlerts(data.recent_alerts || []);
     renderBacktest(data.backtest || {});
+    renderCreators(data.creator_wallets || []);
     allScans = data.recent_snapshots || [];
     renderScans(allScans);
   }

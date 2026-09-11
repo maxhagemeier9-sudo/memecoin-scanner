@@ -16,6 +16,7 @@ from pathlib import Path
 import backtest
 import history
 import paper_trading
+from config import DEFAULT_RISK_THRESHOLDS
 from risk_scan import pool_url
 
 DASHBOARD_DIR = Path(__file__).parent / "docs"
@@ -24,6 +25,7 @@ DASHBOARD_DATA_PATH = DASHBOARD_DIR / "data.json"
 RECENT_SNAPSHOTS_LIMIT = 60
 RECENT_ALERTS_LIMIT = 30
 CLOSED_TRADES_LIMIT = 50
+CREATOR_WALLETS_LIMIT = 20
 
 
 def _recent_snapshots(conn: sqlite3.Connection, limit: int = RECENT_SNAPSHOTS_LIMIT) -> list[dict]:
@@ -112,6 +114,67 @@ def _trade_dict(trade: paper_trading.PaperTrade) -> dict:
     }
 
 
+def _creator_wallets(conn: sqlite3.Connection, limit: int = CREATOR_WALLETS_LIMIT) -> list[dict]:
+    """Track-Record je Creator-Wallet mit mind. 2 bekannten Coins ("Serial-
+    Launcher") - pro Coin, ob die Liquidität vom ersten zum letzten
+    bekannten Snapshot eingebrochen ist (dieselbe Definition wie
+    history.creator_rugged_coin_count). Wallets mit den meisten Rug-Treffern
+    zuerst, damit die auffälligsten sofort sichtbar sind.
+
+    Wallets oberhalb von DEFAULT_RISK_THRESHOLDS.serial_launcher_implausible_
+    count werden ausgeschlossen - live verifiziert, dass manche updateAuthority-
+    Werte gar keine echten Wallets sind, sondern ein von einem Launch-Tool
+    geteilter Platzhalter (ein Fall: 142 Coins auf eine on-chain nicht
+    existierende Adresse, siehe risk.evaluate_creator_history), kein
+    aussagekräftiges Serial-Launcher-Signal."""
+    rows = conn.execute(
+        """SELECT creator_authority, address, symbol, scanned_at, liquidity_usd, pool_address
+           FROM snapshots WHERE creator_authority IS NOT NULL
+           ORDER BY creator_authority, address, scanned_at ASC"""
+    ).fetchall()
+
+    by_creator: dict[str, dict[str, list]] = {}
+    for creator, address, symbol, scanned_at, liquidity_usd, pool_address in rows:
+        by_creator.setdefault(creator, {}).setdefault(address, []).append(
+            (symbol, liquidity_usd, pool_address)
+        )
+
+    wallets = []
+    for creator, coins in by_creator.items():
+        if len(coins) < 2 or len(coins) > DEFAULT_RISK_THRESHOLDS.serial_launcher_implausible_count:
+            continue
+
+        coin_list = []
+        rugged_count = 0
+        for address, entries in coins.items():
+            symbol, first_liquidity, _ = entries[0]
+            _, last_liquidity, pool_address = entries[-1]
+
+            rugged = False
+            if first_liquidity is not None and first_liquidity > 0 and last_liquidity is not None:
+                drop_percent = (first_liquidity - last_liquidity) / first_liquidity * 100
+                rugged = drop_percent >= DEFAULT_RISK_THRESHOLDS.liquidity_crash_percent_high
+            if rugged:
+                rugged_count += 1
+
+            coin_list.append({
+                "address": address,
+                "symbol": symbol,
+                "rugged": rugged,
+                "chart_url": pool_url(pool_address),
+            })
+
+        wallets.append({
+            "creator_authority": creator,
+            "coin_count": len(coin_list),
+            "rugged_count": rugged_count,
+            "coins": coin_list,
+        })
+
+    wallets.sort(key=lambda w: (-w["rugged_count"], -w["coin_count"]))
+    return wallets[:limit]
+
+
 def _backtest_section(conn: sqlite3.Connection) -> dict:
     results = backtest.stored_results(conn)
     return {
@@ -138,6 +201,7 @@ def build_dashboard_data(conn: sqlite3.Connection) -> dict:
             "summary": summary,
         },
         "backtest": _backtest_section(conn),
+        "creator_wallets": _creator_wallets(conn),
     }
 
 

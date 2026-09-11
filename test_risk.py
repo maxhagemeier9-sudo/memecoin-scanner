@@ -202,6 +202,27 @@ def test_creator_with_a_rugged_previous_coin_is_kritisch():
     assert findings[0].severity == Severity.KRITISCH
 
 
+def test_implausibly_high_previous_coin_count_yields_no_finding():
+    # live verifiziert: manche updateAuthority-Werte sind ein gemeinsamer
+    # Platzhalter (142 Coins auf eine on-chain nicht existierende Adresse),
+    # kein individuelles Serial-Launcher-Signal mehr
+    findings = evaluate_creator_history(142, THRESHOLDS)
+    assert findings == []
+
+
+def test_implausibly_high_previous_coin_count_suppresses_rug_finding_too():
+    # selbst ein Rug-Treffer wird oberhalb der Plausibilitaetsschwelle nicht
+    # mehr gewertet, weil es strukturell kein einzelner Akteur sein kann
+    findings = evaluate_creator_history(142, THRESHOLDS, rugged_coin_count=8)
+    assert findings == []
+
+
+def test_count_at_the_implausible_threshold_still_counts():
+    findings = evaluate_creator_history(THRESHOLDS.serial_launcher_implausible_count, THRESHOLDS)
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.HOCH
+
+
 def test_rugged_previous_coin_outranks_the_serial_launcher_count():
     # selbst bei nur einem einzigen bisherigen Coin ist ein Rug-Nachweis
     # schwerwiegender als die reine "viele Coins gelistet"-Zaehlung

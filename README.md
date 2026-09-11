@@ -55,7 +55,11 @@ Seit 2026-09-10 (Birdeye-Compute-Units-Kontingent bis 2026-10-08 erschöpft):
 - Creator-Reputation: wie viele andere Coins dieselbe Creator-Wallet schon gelistet hat
   ("Serial-Launcher"), UND ob nachweislich einer davon einen Liquiditäts-Einbruch hatte
   (`history.creator_rugged_coin_count`) - ein tatsächliches Rug-Pull-Muster wiegt schwerer
-  (KRITISCH) als die reine Zählung bisheriger Coins
+  (KRITISCH) als die reine Zählung bisheriger Coins. Oberhalb von
+  `RiskThresholds.serial_launcher_implausible_count` (Standard 50) wird kein Finding mehr erzeugt -
+  live verifiziert, dass manche `updateAuthority`-Werte kein echtes Wallet sind, sondern ein von
+  einem Launch-Tool geteilter Platzhalter (ein Fall: 142 Coins auf eine on-chain nicht existierende
+  Adresse), kein individuelles Serial-Launcher-Signal mehr
 
 **Bewusst NICHT (mehr) geprüft:**
 - Gesamt-Holder-Zahl (nur noch Top-10-Konzentration - `getTokenLargestAccounts` liefert nur die
@@ -111,7 +115,8 @@ für die Backtest-Auswertung im Dashboard.
 
 `docs/index.html` ist ein eigenständiges Web-Dashboard (kein Node/Build-Step, reines HTML/CSS/JS)
 mit Ranking, offenen/geschlossenen Paper-Trades, einer P&L-Equity-Kurve, den letzten Alerts, der
-Backtest-Auswertung je Risiko-Level und einer filterbaren Liste aller zuletzt gescannten Coins -
+Backtest-Auswertung je Risiko-Level, einer Serial-Launcher-Wallet-Übersicht (Track-Record je
+Creator-Wallet mit ≥2 Coins) und einer filterbaren Liste aller zuletzt gescannten Coins -
 Light/Dark-Theme, auto-refresh alle 45s.
 Die Daten kommen aus `docs/data.json`, das `dashboard_export.py` als letzter CI-Schritt aus
 `history.sqlite3` neu schreibt und direkt per `actions/deploy-pages` veröffentlicht (kein
@@ -121,3 +126,9 @@ Git-Commit pro Lauf, sonst würde die Historie mit einem Daten-Commit alle ~10 M
 Settings → Pages → "Build and deployment" → Source: **GitHub Actions** auswählen. Danach ist das
 Dashboard unter `https://<username>.github.io/<repo>/` erreichbar und aktualisiert sich mit
 jedem Scan von selbst.
+
+## Meta-Monitoring
+
+Schlägt ein Scan-Lauf komplett fehl (egal an welchem Schritt), schickt `scan.yml` einen separaten
+Telegram-Alarm mit Link zu den Logs - bewusst per reinem `curl` statt über unseren eigenen
+Python-Code, damit ein Bug im eigenen Code diesen Alarm nicht selbst verhindern kann.

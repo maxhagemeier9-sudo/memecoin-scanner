@@ -218,7 +218,17 @@ def evaluate_creator_history(
     gezeigt haben - ein tatsächliches Outcome-Signal statt nur eine Zählung,
     und deutlich aussagekräftiger: ein Serial-Launcher mit durchweg stabilen
     früheren Coins ist ein anderes Risiko als einer mit einer Rug-Spur.
+
+    Oberhalb von thresholds.serial_launcher_implausible_count wird gar kein
+    Finding mehr erzeugt: live verifiziert, dass manche updateAuthority-Werte
+    gar keine echten Wallets sind, sondern ein von einem Launch-Tool geteilter
+    Platzhalter (ein Fall: 142 Coins auf eine on-chain nicht existierende
+    Adresse) - oberhalb der Schwelle ist es kein individuelles Akteur-Signal
+    mehr, sondern strukturelles Rauschen.
     """
+    if previous_coin_count > thresholds.serial_launcher_implausible_count:
+        return []
+
     if rugged_coin_count > 0:
         return [RiskFinding(
             Severity.KRITISCH,
