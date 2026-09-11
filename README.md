@@ -90,6 +90,12 @@ Die Historie-DB (`history.sqlite3`) wird zwischen den Läufen per `actions/cache
 Trend- und Creator-Signale sowie offene Paper-Trades auch über einzelne, unabhängige
 Workflow-Läufe hinweg funktionieren.
 
+**Alert-Latenz:** `scan_new_coins()`/`recheck_watchlist()` bewerten bis zu ~40 bzw. 10 Coins
+sequenziell (RPC-Calls + Pause pro Coin, insgesamt oft 30-60s pro Lauf). Alerts werden über einen
+`on_assessed`-Callback SOFORT verschickt, sobald ein einzelner Coin fertig bewertet ist - nicht
+erst, nachdem der komplette Batch durchgelaufen ist (siehe `monitor.scan_once`). Zusätzlich cacht
+`actions/setup-python` die pip-Abhängigkeiten, damit weniger Zeit vor dem eigentlichen Scan draufgeht.
+
 Pro Scan-Zyklus eröffnet Paper Trading nur eine Position - für den am höchsten bewerteten
 Alert-Kandidaten (Score) des jeweiligen Laufs, nicht für jeden einzelnen Alert. Einmal pro
 UTC-Kalendertag verschickt `paper_trading.maybe_send_daily_summary()` zusätzlich einen kurzen

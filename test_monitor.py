@@ -27,6 +27,27 @@ def _no_real_daily_jobs():
         yield
 
 
+def _fake_scan(results):
+    """Simuliert scan_new_coins(): ruft on_assessed (falls uebergeben) sofort
+    pro Ergebnis auf, genau wie die echte Implementierung, die Alerts inline
+    waehrend des Scans verschickt statt erst nach dem kompletten Batch."""
+    def _fake(client, pages=None, conn=None, on_assessed=None):
+        if on_assessed is not None:
+            for listing, assessment in results:
+                on_assessed(listing, assessment)
+        return results
+    return _fake
+
+
+def _fake_recheck(results):
+    def _fake(client, conn, limit=None, on_assessed=None):
+        if on_assessed is not None:
+            for first, assessment in results:
+                on_assessed(first, assessment)
+        return results
+    return _fake
+
+
 def _result(symbol, address, score_total, findings=None, price=None, pool_address=None):
     findings = findings or []
     report = build_report(address, symbol, findings, [])
@@ -54,7 +75,7 @@ def _rising_assessment(address="addr1", liquidity_usd=3_000.0, overall=Severity.
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_high_score_triggers_alert(mock_scan, mock_alert, mock_send):
-    mock_scan.return_value = [_result("HOT", "addr1", 85)]
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85)])
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -68,7 +89,7 @@ def test_high_score_triggers_alert(mock_scan, mock_alert, mock_send):
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_alert_includes_chart_link_when_pool_address_known(mock_scan, mock_alert, mock_send):
-    mock_scan.return_value = [_result("HOT", "addr1", 85, pool_address="PoolAddr123")]
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85, pool_address="PoolAddr123")])
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -81,7 +102,7 @@ def test_alert_includes_chart_link_when_pool_address_known(mock_scan, mock_alert
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_alert_omits_chart_link_without_pool_address(mock_scan, mock_alert, mock_send):
-    mock_scan.return_value = [_result("HOT", "addr1", 85)]
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85)])
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -95,7 +116,7 @@ def test_alert_omits_chart_link_without_pool_address(mock_scan, mock_alert, mock
 @patch("monitor.scan_new_coins")
 def test_low_score_and_high_risk_does_not_alert(mock_scan, mock_alert, mock_send):
     findings = [RiskFinding(Severity.HOCH, "Sehr geringe Liquidität")]
-    mock_scan.return_value = [_result("MEH", "addr1", 30, findings=findings)]
+    mock_scan.side_effect = _fake_scan([_result("MEH", "addr1", 30, findings=findings)])
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -109,7 +130,7 @@ def test_low_score_and_high_risk_does_not_alert(mock_scan, mock_alert, mock_send
 @patch("monitor.scan_new_coins")
 def test_kritisch_risk_with_capped_low_score_does_not_alert(mock_scan, mock_alert, mock_send):
     findings = [RiskFinding(Severity.KRITISCH, "Mint-Authority aktiv")]
-    mock_scan.return_value = [_result("BAD", "addr1", 10, findings=findings)]
+    mock_scan.side_effect = _fake_scan([_result("BAD", "addr1", 10, findings=findings)])
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -123,7 +144,7 @@ def test_kritisch_risk_with_capped_low_score_does_not_alert(mock_scan, mock_aler
 @patch("monitor.scan_new_coins")
 def test_mittel_risk_alerts_even_with_low_score(mock_scan, mock_alert, mock_send):
     findings = [RiskFinding(Severity.MITTEL, "Nur 40 Holder insgesamt")]
-    mock_scan.return_value = [_result("MID", "addr1", 45, findings=findings)]  # Score < 70
+    mock_scan.side_effect = _fake_scan([_result("MID", "addr1", 45, findings=findings)])  # Score < 70
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -136,7 +157,7 @@ def test_mittel_risk_alerts_even_with_low_score(mock_scan, mock_alert, mock_send
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_niedrig_risk_alerts_even_with_low_score(mock_scan, mock_alert, mock_send):
-    mock_scan.return_value = [_result("SAFE", "addr1", 20)]  # keine Findings -> NIEDRIG
+    mock_scan.side_effect = _fake_scan([_result("SAFE", "addr1", 20)])  # keine Findings -> NIEDRIG
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -149,7 +170,7 @@ def test_niedrig_risk_alerts_even_with_low_score(mock_scan, mock_alert, mock_sen
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_already_alerted_address_is_not_alerted_again(mock_scan, mock_alert, mock_send):
-    mock_scan.return_value = [_result("HOT", "addr1", 85)]
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85)])
     conn = connect(db_path=":memory:")
     try:
         mark_alerted(conn, "addr1")
@@ -163,7 +184,7 @@ def test_already_alerted_address_is_not_alerted_again(mock_scan, mock_alert, moc
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_alerted_address_is_persisted_in_history_db(mock_scan, mock_alert, mock_send):
-    mock_scan.return_value = [_result("HOT", "addr1", 85)]
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85)])
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -177,7 +198,7 @@ def test_alerted_address_is_persisted_in_history_db(mock_scan, mock_alert, mock_
 @patch("monitor.scan_new_coins")
 def test_alert_dedup_survives_a_fresh_connection_to_the_same_db_file(mock_scan, mock_alert, mock_send, tmp_path):
     db_path = tmp_path / "history.sqlite3"
-    mock_scan.return_value = [_result("HOT", "addr1", 85)]
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85)])
 
     conn1 = connect(db_path=str(db_path))
     scan_once(client=object(), conn=conn1)
@@ -196,7 +217,7 @@ def test_alert_dedup_survives_a_fresh_connection_to_the_same_db_file(mock_scan, 
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_every_scan_sends_a_telegram_summary_regardless_of_threshold(mock_scan, mock_alert, mock_send):
-    mock_scan.return_value = [_result("MEH", "addr1", 20)]  # weit unter der Alert-Schwelle
+    mock_scan.side_effect = _fake_scan([_result("MEH", "addr1", 20)])  # weit unter der Alert-Schwelle
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -213,7 +234,7 @@ def test_every_scan_sends_a_telegram_summary_regardless_of_threshold(mock_scan, 
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_telegram_summary_failure_does_not_crash_scan(mock_scan, mock_alert, mock_send):
-    mock_scan.return_value = [_result("MEH", "addr1", 20)]
+    mock_scan.side_effect = _fake_scan([_result("MEH", "addr1", 20)])
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)  # darf nicht crashen
@@ -227,7 +248,9 @@ def test_telegram_summary_failure_does_not_crash_scan(mock_scan, mock_alert, moc
 @patch("monitor.scan_new_coins")
 def test_rising_coin_triggers_a_separate_alert(mock_scan, mock_alert, mock_recheck, mock_send):
     mock_scan.return_value = []  # kein regulärer Scan-Treffer in diesem Test
-    mock_recheck.return_value = [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0))]
+    mock_recheck.side_effect = _fake_recheck(
+        [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0))]
+    )
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -244,10 +267,10 @@ def test_rising_coin_triggers_a_separate_alert(mock_scan, mock_alert, mock_reche
 @patch("monitor.scan_new_coins")
 def test_rising_coin_alert_includes_chart_link(mock_scan, mock_alert, mock_recheck, mock_send):
     mock_scan.return_value = []
-    mock_recheck.return_value = [(
+    mock_recheck.side_effect = _fake_recheck([(
         _first_snapshot(liquidity_usd=1_000.0),
         _rising_assessment(liquidity_usd=3_000.0, pool_address="PoolAddr123"),
-    )]
+    )])
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -263,7 +286,9 @@ def test_rising_coin_alert_includes_chart_link(mock_scan, mock_alert, mock_reche
 def test_non_rising_watchlist_candidate_does_not_alert(mock_scan, mock_alert, mock_recheck, mock_send):
     mock_scan.return_value = []
     # kaum Wachstum -> is_rising() liefert False
-    mock_recheck.return_value = [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=1_050.0))]
+    mock_recheck.side_effect = _fake_recheck(
+        [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=1_050.0))]
+    )
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -278,7 +303,9 @@ def test_non_rising_watchlist_candidate_does_not_alert(mock_scan, mock_alert, mo
 @patch("monitor.scan_new_coins")
 def test_already_rising_alerted_address_is_not_alerted_again(mock_scan, mock_alert, mock_recheck, mock_send):
     mock_scan.return_value = []
-    mock_recheck.return_value = [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0))]
+    mock_recheck.side_effect = _fake_recheck(
+        [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0))]
+    )
     conn = connect(db_path=":memory:")
     try:
         mark_rising_alerted(conn, "addr1")
@@ -294,7 +321,9 @@ def test_already_rising_alerted_address_is_not_alerted_again(mock_scan, mock_ale
 @patch("monitor.scan_new_coins")
 def test_rising_alert_is_persisted_and_independent_of_regular_alerts(mock_scan, mock_alert, mock_recheck, mock_send):
     mock_scan.return_value = []
-    mock_recheck.return_value = [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0))]
+    mock_recheck.side_effect = _fake_recheck(
+        [(_first_snapshot(liquidity_usd=1_000.0), _rising_assessment(liquidity_usd=3_000.0))]
+    )
     conn = connect(db_path=":memory:")
     try:
         scan_once(client=object(), conn=conn)
@@ -309,7 +338,7 @@ def test_rising_alert_is_persisted_and_independent_of_regular_alerts(mock_scan, 
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_alert_with_price_opens_a_paper_trade(mock_scan, mock_alert, mock_recheck, mock_send):
-    mock_scan.return_value = [_result("HOT", "addr1", 85, price=0.001)]
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85, price=0.001)])
     mock_recheck.return_value = []
     client = MagicMock()
     client.get_token_price.return_value = 0.001  # unveraendert -> kein Exit-Trigger
@@ -329,7 +358,7 @@ def test_alert_with_price_opens_a_paper_trade(mock_scan, mock_alert, mock_rechec
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_alert_without_price_does_not_open_a_paper_trade(mock_scan, mock_alert, mock_recheck, mock_send):
-    mock_scan.return_value = [_result("HOT", "addr1", 85, price=None)]
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85, price=None)])
     mock_recheck.return_value = []
     conn = connect(db_path=":memory:")
     try:
@@ -344,7 +373,7 @@ def test_alert_without_price_does_not_open_a_paper_trade(mock_scan, mock_alert, 
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_existing_paper_trade_is_not_opened_twice(mock_scan, mock_alert, mock_recheck, mock_send):
-    mock_scan.return_value = [_result("HOT", "addr1", 85, price=0.001)]
+    mock_scan.side_effect = _fake_scan([_result("HOT", "addr1", 85, price=0.001)])
     mock_recheck.return_value = []
     client = MagicMock()
     client.get_token_price.return_value = 0.0005  # unveraendert -> kein Exit-Trigger
@@ -366,10 +395,10 @@ def test_existing_paper_trade_is_not_opened_twice(mock_scan, mock_alert, mock_re
 @patch("monitor.alert")
 @patch("monitor.scan_new_coins")
 def test_only_the_best_scoring_alert_opens_a_paper_trade(mock_scan, mock_alert, mock_recheck, mock_send):
-    mock_scan.return_value = [
+    mock_scan.side_effect = _fake_scan([
         _result("LOW", "addr1", 71, price=0.001),
         _result("BEST", "addr2", 90, price=0.002),
-    ]
+    ])
     mock_recheck.return_value = []
     client = MagicMock()
     client.get_token_price.return_value = 0.002  # == Entry-Preis von BEST -> kein Exit-Trigger

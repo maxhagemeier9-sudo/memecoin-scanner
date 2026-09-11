@@ -30,6 +30,7 @@ import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Callable
 
 import history
 from config import (
@@ -167,12 +168,21 @@ def scan_new_coins(
     client: GeckoTerminalClient,
     pages: int = RANKING_SCAN_PAGES,
     conn: sqlite3.Connection | None = None,
+    on_assessed: Callable[[dict, TokenAssessment], None] | None = None,
 ) -> list[tuple[dict, TokenAssessment]]:
     """Gibt (listing_dict, TokenAssessment)-Paare zurück. `listing_dict` hat
     dieselben Keys wie vorher ("address", "symbol", "liquidityAddedAt"),
     damit _print_ranking/format_telegram_summary/monitor.py unverändert
     bleiben. Dedupliziert nach Token-Adresse, falls derselbe Coin über
     mehrere Pools/Seiten auftaucht.
+
+    `on_assessed`, falls angegeben, wird SOFORT nach jeder einzelnen
+    Bewertung aufgerufen - nicht erst, nachdem die komplette Seite (bis zu
+    40 Coins, mit Pause+RPC-Calls pro Coin) durchgelaufen ist. Grundlage
+    dafür, dass monitor.scan_once() Alerts verschicken kann, sobald ein
+    Coin fertig ist, statt bis zum Ende des ganzen Batches zu warten (sonst
+    wartet ein früh gefundener, alarmwürdiger Coin unnötig auf alle
+    späteren Coins derselben Seite).
     """
     pools = []
     for page in range(1, pages + 1):
@@ -195,6 +205,8 @@ def scan_new_coins(
             "liquidityAddedAt": listing.created_at,
         }
         results.append((listing_dict, assessment))
+        if on_assessed is not None:
+            on_assessed(listing_dict, assessment)
         time.sleep(RISK_SCAN_THROTTLE_SECONDS)
 
     return results
@@ -225,6 +237,7 @@ def recheck_watchlist(
     client: GeckoTerminalClient,
     conn: sqlite3.Connection,
     limit: int = RISING_STAR_RECHECK_LIMIT,
+    on_assessed: Callable[[history.Snapshot, TokenAssessment], None] | None = None,
 ) -> list[tuple[history.Snapshot, TokenAssessment]]:
     """Prüft bereits bekannte, bisher unauffällige Coins (NIEDRIG/MITTEL-Risiko,
     mind. 2 Snapshots) erneut per gespeicherter Pool-Adresse nach -
@@ -234,6 +247,9 @@ def recheck_watchlist(
     Kandidat, Grundlage für "Rising Coin"-Alerts (siehe is_rising,
     monitor.scan_once). Kandidaten ohne gespeicherte Pool-Adresse (ältere
     Snapshots von vor diesem Feld) werden übersprungen.
+
+    `on_assessed` (siehe scan_new_coins) wird sofort pro Kandidat aufgerufen,
+    statt erst nach dem kompletten Watchlist-Durchlauf.
     """
     candidates = history.watchlist_candidates(conn, limit=limit)
     results = []
@@ -259,6 +275,8 @@ def recheck_watchlist(
 
         assessment = assess_listing(listing, conn=conn)
         results.append((first, assessment))
+        if on_assessed is not None:
+            on_assessed(first, assessment)
         client.throttle()
 
     return results

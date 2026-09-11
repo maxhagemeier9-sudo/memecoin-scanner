@@ -14,6 +14,14 @@ als der Paper-Trading-Report) läuft außerdem ein begrenzter Backtest-Batch
 (siehe backtest.maybe_run_daily_backtest_batch) - testet reifgewordene
 Erstsichtungen gegen die echte Kursentwicklung zurück und speichert die
 Ergebnisse dauerhaft.
+
+WICHTIG für die Alert-Latenz: scan_new_coins()/recheck_watchlist() bewerten
+bis zu ~40 bzw. 10 Coins sequenziell (RPC-Calls + Pause pro Coin, insgesamt
+oft 30-60s). Alerts werden über den on_assessed-Callback SOFORT verschickt,
+sobald ein einzelner Coin fertig bewertet ist - nicht erst, nachdem der
+komplette Batch durchgelaufen ist. Ein früh im Batch gefundener, alarm-
+würdiger Coin muss so nicht auf alle späteren Coins derselben Seite warten
+(vorher bis zu mehrere zehn Sekunden zusätzliche Verzögerung).
 """
 from __future__ import annotations
 
@@ -109,20 +117,13 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
     """
     paper_trading.ensure_schema(conn)
 
-    results = scan_new_coins(client, conn=conn)
-    _print_ranking(results)
-
-    try:
-        send_telegram_message(format_telegram_summary(results), parse_mode="HTML")
-    except TelegramError as exc:
-        print(f"   (Telegram-Zusammenfassung fehlgeschlagen: {exc})")
-
     best_candidate: TokenAssessment | None = None
 
-    for listing, assessment in results:
+    def _handle_regular(listing: dict, assessment: TokenAssessment) -> None:
+        nonlocal best_candidate
         address = listing["address"]
         if history.has_been_alerted(conn, address):
-            continue
+            return
         if _should_alert(assessment):
             alert(_with_link(
                 f"{assessment.report.symbol} - Score {assessment.score.total}/100, "
@@ -133,10 +134,11 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
             if best_candidate is None or assessment.score.total > best_candidate.score.total:
                 best_candidate = assessment
 
-    for first, assessment in recheck_watchlist(client, conn):
+    def _handle_rising(first: history.Snapshot, assessment: TokenAssessment) -> None:
+        nonlocal best_candidate
         address = assessment.report.address
         if history.has_been_rising_alerted(conn, address):
-            continue
+            return
         if is_rising(first, assessment):
             growth_percent = (assessment.liquidity_usd - first.liquidity_usd) / first.liquidity_usd * 100
             alert(_with_link(
@@ -148,6 +150,20 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
             history.mark_rising_alerted(conn, address)
             if best_candidate is None or assessment.score.total > best_candidate.score.total:
                 best_candidate = assessment
+
+    # on_assessed löst Alerts SOFORT pro Coin aus (siehe Docstring oben) -
+    # die Zusammenfassung geht deshalb erst NACH den Einzel-Alerts raus,
+    # das ist beabsichtigt (Einzel-Alerts sind zeitkritischer als der
+    # Überblick über den ganzen Lauf).
+    results = scan_new_coins(client, conn=conn, on_assessed=_handle_regular)
+    _print_ranking(results)
+
+    try:
+        send_telegram_message(format_telegram_summary(results), parse_mode="HTML")
+    except TelegramError as exc:
+        print(f"   (Telegram-Zusammenfassung fehlgeschlagen: {exc})")
+
+    recheck_watchlist(client, conn, on_assessed=_handle_rising)
 
     if best_candidate is not None:
         _maybe_open_paper_trade(conn, best_candidate)

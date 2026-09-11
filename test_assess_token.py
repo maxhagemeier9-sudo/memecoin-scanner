@@ -244,6 +244,63 @@ def test_scan_new_coins_paginates_and_dedupes_by_token_address(mock_authorities,
 
 @patch("risk_scan.get_top10_concentration")
 @patch("risk_scan.get_mint_authorities")
+def test_scan_new_coins_invokes_on_assessed_immediately_per_coin(mock_authorities, mock_top10):
+    """on_assessed feuert PRO Coin sofort nach dessen Bewertung, nicht erst
+    nach dem kompletten Batch - Grundlage dafür, dass monitor.scan_once()
+    Alerts ohne Wartezeit auf die restlichen Coins verschicken kann."""
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None, total_supply=1_000_000.0)
+    mock_top10.return_value = 10.0
+
+    client = MagicMock()
+    client.get_new_pools.return_value = [_pool_dict(token_address=f"addr-{i}", pool_address=f"pool-{i}") for i in range(5)]
+
+    seen_during_call: list[str] = []
+
+    def _on_assessed(listing, assessment):
+        seen_during_call.append(listing["address"])
+        # Zum Zeitpunkt des Callbacks fuer den ERSTEN Coin duerfen die
+        # spaeteren Coins noch NICHT bewertet worden sein.
+        if listing["address"] == "addr-0":
+            assert seen_during_call == ["addr-0"]
+
+    results = scan_new_coins(client, pages=1, on_assessed=_on_assessed)
+
+    assert seen_during_call == [f"addr-{i}" for i in range(5)]
+    assert len(results) == 5
+
+
+@patch("risk_scan.get_top10_concentration")
+@patch("risk_scan.get_mint_authorities")
+def test_recheck_watchlist_invokes_on_assessed_immediately_per_coin(mock_authorities, mock_top10):
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None, total_supply=1_000_000.0)
+    mock_top10.return_value = 10.0
+
+    conn = connect(db_path=":memory:")
+    try:
+        record_snapshot(conn, Snapshot(
+            address="addr", symbol="SYM", scanned_at="2026-09-09T00:00:00+00:00",
+            liquidity_usd=1_000.0, volume_24h_usd=1_000.0, holder_count=None,
+            top10_percent=20.0, score_total=50, risk_level="MITTEL", pool_address="pool-xyz",
+        ))
+        record_snapshot(conn, Snapshot(
+            address="addr", symbol="SYM", scanned_at="2026-09-09T00:10:00+00:00",
+            liquidity_usd=1_500.0, volume_24h_usd=1_000.0, holder_count=None,
+            top10_percent=20.0, score_total=55, risk_level="MITTEL", pool_address="pool-xyz",
+        ))
+
+        client = MagicMock()
+        client.get_pool.return_value = _pool_dict(token_address="addr", pool_address="pool-xyz")
+
+        called = []
+        recheck_watchlist(client, conn, limit=10, on_assessed=lambda first, a: called.append(a.report.address))
+
+        assert called == ["addr"]
+    finally:
+        conn.close()
+
+
+@patch("risk_scan.get_top10_concentration")
+@patch("risk_scan.get_mint_authorities")
 def test_recheck_watchlist_fetches_pool_and_reassesses(mock_authorities, mock_top10):
     mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None, total_supply=1_000_000.0)
     mock_top10.return_value = 10.0
