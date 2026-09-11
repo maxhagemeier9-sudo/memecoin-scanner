@@ -11,10 +11,11 @@ Security-Audit:
   Token-Metadata) werden geprüft (siehe solana_rpc.py) - das deckt die
   gängigsten technischen Rug- und Honeypot-Signale ab, die sich direkt aus
   dem Mint-Account lesen lassen.
-- Liquiditäts-Sperren/-Burns werden NICHT geprüft: die meisten frisch
-  gelisteten Coins laufen noch auf einer Bonding Curve ohne klassischen
-  LP-Token, und eine verlässliche Prüfung würde eine zusätzliche, weniger
-  stabile externe Datenquelle (Pool-Discovery) voraussetzen.
+- Liquiditäts-Sperren/-Burns werden geprüft (evaluate_liquidity_lock, über
+  GeckoTerminals locked_liquidity_percentage), aber nur sobald ein Coin
+  einen klassischen LP-Token hat - für frische Coins auf einer Bonding
+  Curve (z.B. pump.fun vor der Migration) liefert GeckoTerminal dafür noch
+  keinen Wert, das wird bewusst nicht als Risiko gewertet.
 - Die tatsächliche Ausführung der Transfer-Hook-Logik wird NICHT simuliert
   (nur ob die Extension aktiv ist) - eine echte Simulation bräuchte eine
   reale Swap-Transaktion samt Wallet und ist damit ein eigenes, größeres
@@ -141,6 +142,36 @@ def evaluate_holder_concentration(
         findings.append(RiskFinding(Severity.MITTEL, f"Nur {holder_count} Holder insgesamt"))
 
     return findings
+
+
+def evaluate_liquidity_lock(
+    locked_liquidity_percentage: float | None,
+    thresholds: RiskThresholds = DEFAULT_RISK_THRESHOLDS,
+) -> list[RiskFinding]:
+    """locked_liquidity_percentage kommt von GeckoTerminal (nur in der Pool-
+    Detail-Antwort enthalten, siehe geckoterminal_client.PoolListing) und ist
+    None, wenn der Pool noch keinen klassischen LP-Token hat (z.B. eine
+    Bonding-Curve vor der Migration) - dort ist die Liquidität strukturell
+    im Programm gebunden und kann vom Ersteller nicht einfach abgezogen
+    werden, deshalb wird None NICHT als Risiko gewertet, sondern schlicht
+    übersprungen (wie andere fehlende Werte in diesem Modul)."""
+    if locked_liquidity_percentage is None:
+        return []
+
+    if locked_liquidity_percentage < thresholds.locked_liquidity_percent_high:
+        return [RiskFinding(
+            Severity.HOCH,
+            f"Nur {locked_liquidity_percentage:.0f}% der Liquidität gesperrt - "
+            "hohes Rug-Pull-Risiko (Ersteller kann den Rest jederzeit abziehen)",
+        )]
+
+    if locked_liquidity_percentage < thresholds.locked_liquidity_percent_medium:
+        return [RiskFinding(
+            Severity.MITTEL,
+            f"Nur {locked_liquidity_percentage:.0f}% der Liquidität gesperrt",
+        )]
+
+    return []
 
 
 def evaluate_liquidity_and_trading(

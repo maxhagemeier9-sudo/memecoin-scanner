@@ -7,17 +7,18 @@ from risk_scan import (
     _pad,
     _top_finding_text,
     format_telegram_summary,
+    pool_url,
     rank_by_score,
 )
 from score import Score
 
 
-def _assessment(symbol, total_score, findings=None, capped=False, address="addr"):
+def _assessment(symbol, total_score, findings=None, capped=False, address="addr", pool_address=None):
     findings = findings or []
     report = build_report(address, symbol, findings, [])
     score = Score(total=total_score, capped=capped, breakdown=[])
     listing = {"address": address, "symbol": symbol, "liquidityAddedAt": "2026-09-09T00:00:00"}
-    return listing, TokenAssessment(report=report, score=score, liquidity_usd=1_000)
+    return listing, TokenAssessment(report=report, score=score, liquidity_usd=1_000, pool_address=pool_address)
 
 
 def test_rank_by_score_sorts_descending():
@@ -103,3 +104,24 @@ def test_telegram_summary_wraps_address_in_code_tag():
     results = [_assessment("AAA", 80, address="SomeAddress123")]
     text = format_telegram_summary(results)
     assert "<code>SomeAddress123</code>" in text
+
+
+def test_telegram_summary_includes_chart_link_when_pool_address_known():
+    results = [_assessment("AAA", 80, pool_address="PoolAddr123")]
+    text = format_telegram_summary(results)
+    assert "https://www.geckoterminal.com/solana/pools/PoolAddr123" in text
+
+
+def test_telegram_summary_omits_chart_link_without_pool_address():
+    results = [_assessment("AAA", 80, pool_address=None)]
+    text = format_telegram_summary(results)
+    assert "geckoterminal.com" not in text
+
+
+def test_pool_url_builds_geckoterminal_link():
+    assert pool_url("PoolAddr123") == "https://www.geckoterminal.com/solana/pools/PoolAddr123"
+
+
+def test_pool_url_returns_none_without_address():
+    assert pool_url(None) is None
+    assert pool_url("") is None

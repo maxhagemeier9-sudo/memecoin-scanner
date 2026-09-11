@@ -41,6 +41,11 @@ class PoolListing:
     trade_24h: int
     unique_wallet_24h: int
     dex: str | None = None
+    # Nur in der Pool-DETAIL-Antwort (get_pool) vorhanden, NICHT in der
+    # new_pools-Liste - für ganz frische Coins auf einer Bonding Curve
+    # (z.B. pump.fun vor der Migration) strukturell None, da dort noch kein
+    # klassischer LP-Token existiert, den man sperren könnte.
+    locked_liquidity_percentage: float | None = None
 
 
 def _strip_network_prefix(token_id: str, network: str) -> str:
@@ -88,6 +93,7 @@ def parse_pool(pool: dict[str, Any], network: str = "solana") -> PoolListing | N
         trade_24h=trade_24h,
         unique_wallet_24h=unique_wallet_24h,
         dex=(relationships.get("dex", {}).get("data") or {}).get("id"),
+        locked_liquidity_percentage=_as_float(attrs.get("locked_liquidity_percentage")),
     )
 
 

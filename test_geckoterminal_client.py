@@ -112,6 +112,21 @@ def test_parse_pool_returns_none_when_base_token_missing():
     assert parse_pool(broken) is None
 
 
+def test_parse_pool_extracts_locked_liquidity_percentage_when_present():
+    pool_with_lock = {
+        "attributes": {**REAL_POOL["attributes"], "locked_liquidity_percentage": "97.5"},
+        "relationships": REAL_POOL["relationships"],
+    }
+    listing = parse_pool(pool_with_lock)
+    assert listing.locked_liquidity_percentage == pytest.approx(97.5)
+
+
+def test_parse_pool_locked_liquidity_percentage_is_none_when_absent():
+    # new_pools-Liste liefert dieses Feld nicht, nur die Pool-Detail-Antwort
+    listing = parse_pool(REAL_POOL)
+    assert listing.locked_liquidity_percentage is None
+
+
 def test_parse_pool_falls_back_to_placeholder_symbol():
     pool = {
         "attributes": {"address": "a", "name": "", "transactions": {}, "volume_usd": {}},

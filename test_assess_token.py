@@ -18,11 +18,13 @@ def _listing(
     token_address="addr", symbol="SYM", pool_address="pool1",
     price_usd=1.0, liquidity_usd=100_000.0, volume_24h_usd=200_000.0,
     trade_24h=100, unique_wallet_24h=80, created_at="2026-09-10T00:00:00Z",
+    locked_liquidity_percentage=None,
 ) -> PoolListing:
     return PoolListing(
         pool_address=pool_address, token_address=token_address, symbol=symbol,
         created_at=created_at, price_usd=price_usd, liquidity_usd=liquidity_usd,
         volume_24h_usd=volume_24h_usd, trade_24h=trade_24h, unique_wallet_24h=unique_wallet_24h,
+        locked_liquidity_percentage=locked_liquidity_percentage,
     )
 
 
@@ -59,6 +61,16 @@ def test_healthy_token_produces_high_score_and_no_findings(mock_authorities, moc
     assert assessment.report.overall == Severity.NIEDRIG
     assert assessment.score.total >= 80
     assert not assessment.score.capped
+
+
+@patch("risk_scan.get_top10_concentration")
+@patch("risk_scan.get_mint_authorities")
+def test_mostly_unlocked_liquidity_is_flagged(mock_authorities, mock_top10):
+    mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None, total_supply=1_000_000.0)
+    mock_top10.return_value = 10.0
+    assessment = assess_listing(_listing(locked_liquidity_percentage=10.0))
+    assert any("gesperrt" in f.message for f in assessment.report.findings)
+    assert assessment.report.overall == Severity.HOCH
 
 
 @patch("risk_scan.get_top10_concentration")

@@ -19,8 +19,8 @@ WICHTIG: holder_count (Gesamtzahl aller Holder, nicht nur Top-10) ist seit
 dem Wechsel nicht mehr verfügbar - siehe config.ScoreWeights-Docstring.
 
 Siehe risk.py für die genauen Risk-Kriterien und deren bewusste Grenzen
-(u.a. KEINE Prüfung von Liquiditäts-Sperren/-Burns oder Contract-Logik) und
-score.py für die Herleitung des Scores aus denselben Rohdaten.
+(u.a. KEINE Simulation der Contract-Logik selbst) und score.py für die
+Herleitung des Scores aus denselben Rohdaten.
 """
 from __future__ import annotations
 
@@ -52,6 +52,7 @@ from risk import (
     evaluate_creator_history,
     evaluate_holder_concentration,
     evaluate_liquidity_and_trading,
+    evaluate_liquidity_lock,
     evaluate_liquidity_trend,
     evaluate_token_extensions,
 )
@@ -108,6 +109,7 @@ def assess_listing(listing: PoolListing, conn: sqlite3.Connection | None = None)
         trade_24h=listing.trade_24h,
         unique_wallet_24h=listing.unique_wallet_24h,
     )
+    findings += evaluate_liquidity_lock(listing.locked_liquidity_percentage)
 
     if conn is not None:
         previous = history.previous_snapshot(conn, listing.token_address)
@@ -257,6 +259,14 @@ def recheck_watchlist(
     return results
 
 
+def pool_url(pool_address: str | None) -> str | None:
+    """Direktlink zur Chart-/Pool-Ansicht auf GeckoTerminal (derselbe Anbieter,
+    den wir schon als Datenquelle nutzen) - None ohne bekannte Pool-Adresse,
+    damit man in Telegram sofort nachschauen kann, statt die Adresse manuell
+    irgendwo einzufügen (u.a. fürs schnelle FOMO-/Hype-Gegenchecken)."""
+    return f"https://www.geckoterminal.com/solana/pools/{pool_address}" if pool_address else None
+
+
 def _score_icon(total: int) -> str:
     if total >= 70:
         return "🟢"
@@ -314,10 +324,14 @@ def format_telegram_summary(
         cap_note = " (gedeckelt)" if score.capped else ""
         symbol = html.escape(report.symbol)
 
-        lines.append(
+        line = (
             f"\n{icon} {rank}. {symbol} — Score {score.total}/100{cap_note} — {report.overall.name}\n"
             f"<code>{report.address}</code>"
         )
+        url = pool_url(assessment.pool_address)
+        if url:
+            line += f'\n<a href="{url}">Chart ansehen</a>'
+        lines.append(line)
 
     return "\n".join(lines)
 

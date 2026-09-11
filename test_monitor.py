@@ -11,12 +11,12 @@ from score import Score
 from telegram_alerts import TelegramError
 
 
-def _result(symbol, address, score_total, findings=None, price=None):
+def _result(symbol, address, score_total, findings=None, price=None, pool_address=None):
     findings = findings or []
     report = build_report(address, symbol, findings, [])
     score = Score(total=score_total, capped=False, breakdown=[])
     listing = {"address": address, "symbol": symbol, "liquidityAddedAt": "2026-09-09T00:00:00"}
-    return listing, TokenAssessment(report=report, score=score, liquidity_usd=1_000, price=price)
+    return listing, TokenAssessment(report=report, score=score, liquidity_usd=1_000, price=price, pool_address=pool_address)
 
 
 def _first_snapshot(address="addr1", liquidity_usd=1_000.0):
@@ -27,11 +27,11 @@ def _first_snapshot(address="addr1", liquidity_usd=1_000.0):
     )
 
 
-def _rising_assessment(address="addr1", liquidity_usd=3_000.0, overall=Severity.MITTEL):
+def _rising_assessment(address="addr1", liquidity_usd=3_000.0, overall=Severity.MITTEL, pool_address=None):
     report = build_report(address, "RISER", [], [])
     object.__setattr__(report, "overall", overall)  # RiskReport ist frozen
     score = Score(total=65, capped=False, breakdown=[])
-    return TokenAssessment(report=report, score=score, liquidity_usd=liquidity_usd)
+    return TokenAssessment(report=report, score=score, liquidity_usd=liquidity_usd, pool_address=pool_address)
 
 
 @patch("monitor.send_telegram_message")
@@ -44,6 +44,32 @@ def test_high_score_triggers_alert(mock_scan, mock_alert, mock_send):
         scan_once(client=object(), conn=conn)
         mock_alert.assert_called_once()
         assert "HOT" in mock_alert.call_args[0][0]
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_alert_includes_chart_link_when_pool_address_known(mock_scan, mock_alert, mock_send):
+    mock_scan.return_value = [_result("HOT", "addr1", 85, pool_address="PoolAddr123")]
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        assert "https://www.geckoterminal.com/solana/pools/PoolAddr123" in mock_alert.call_args[0][0]
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_alert_omits_chart_link_without_pool_address(mock_scan, mock_alert, mock_send):
+    mock_scan.return_value = [_result("HOT", "addr1", 85)]
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        assert "geckoterminal.com" not in mock_alert.call_args[0][0]
     finally:
         conn.close()
 
@@ -192,6 +218,24 @@ def test_rising_coin_triggers_a_separate_alert(mock_scan, mock_alert, mock_reche
         mock_alert.assert_called_once()
         assert "Rising Coin" in mock_alert.call_args[0][0]
         assert "addr1" in mock_alert.call_args[0][0]
+    finally:
+        conn.close()
+
+
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_rising_coin_alert_includes_chart_link(mock_scan, mock_alert, mock_recheck, mock_send):
+    mock_scan.return_value = []
+    mock_recheck.return_value = [(
+        _first_snapshot(liquidity_usd=1_000.0),
+        _rising_assessment(liquidity_usd=3_000.0, pool_address="PoolAddr123"),
+    )]
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=object(), conn=conn)
+        assert "https://www.geckoterminal.com/solana/pools/PoolAddr123" in mock_alert.call_args[0][0]
     finally:
         conn.close()
 

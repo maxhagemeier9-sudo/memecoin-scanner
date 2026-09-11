@@ -29,6 +29,7 @@ from risk_scan import (
     _print_ranking,
     format_telegram_summary,
     is_rising,
+    pool_url,
     recheck_watchlist,
     scan_new_coins,
 )
@@ -64,6 +65,14 @@ def _format_paper_trade_closures(closed: list[tuple]) -> str:
     wins = sum(1 for p in pnl_percents if p > 0)
     avg_pnl = sum(pnl_percents) / count
     return f"📝 Paper-Trading: {count} Position(en) geschlossen ({wins} Gewinn/{count - wins} Verlust), Ø {avg_pnl:+.0f}%"
+
+
+def _with_link(text: str, pool_address: str | None) -> str:
+    """Hängt den GeckoTerminal-Chart-Link an, sofern eine Pool-Adresse bekannt
+    ist - Telegram macht aus einer nackten URL im Text automatisch einen
+    klickbaren Link, auch ohne HTML-parse_mode (siehe alerts.alert)."""
+    url = pool_url(pool_address)
+    return f"{text}\n{url}" if url else text
 
 
 def _should_alert(assessment: TokenAssessment) -> bool:
@@ -110,10 +119,11 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
         if history.has_been_alerted(conn, address):
             continue
         if _should_alert(assessment):
-            alert(
+            alert(_with_link(
                 f"{assessment.report.symbol} - Score {assessment.score.total}/100, "
-                f"Risiko {assessment.report.overall.name} ({address})"
-            )
+                f"Risiko {assessment.report.overall.name} ({address})",
+                assessment.pool_address,
+            ))
             history.mark_alerted(conn, address)
             if best_candidate is None or assessment.score.total > best_candidate.score.total:
                 best_candidate = assessment
@@ -124,11 +134,12 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
             continue
         if is_rising(first, assessment):
             growth_percent = (assessment.liquidity_usd - first.liquidity_usd) / first.liquidity_usd * 100
-            alert(
+            alert(_with_link(
                 f"📈 Rising Coin: {assessment.report.symbol} - Liquidität +{growth_percent:.0f}% "
                 f"seit Erstsichtung, jetzt Score {assessment.score.total}/100, "
-                f"Risiko {assessment.report.overall.name} ({address})"
-            )
+                f"Risiko {assessment.report.overall.name} ({address})",
+                assessment.pool_address,
+            ))
             history.mark_rising_alerted(conn, address)
             if best_candidate is None or assessment.score.total > best_candidate.score.total:
                 best_candidate = assessment

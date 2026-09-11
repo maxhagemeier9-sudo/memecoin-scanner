@@ -78,6 +78,12 @@ class RiskThresholds:
     # Ab wie viel Liquiditäts-Wachstum seit der ERSTEN Sichtung ein bereits
     # bekannter Coin mit NIEDRIG/MITTEL-Risiko als "Rising Coin" gilt (0.5 = +50%)
     rising_star_min_liquidity_growth: float = 0.5
+    # Anteil der Liquidität, der gesperrt/verbrannt sein muss (GeckoTerminal
+    # locked_liquidity_percentage) - nur für Pools mit klassischem LP-Token
+    # verfügbar (nicht für Coins, die noch auf einer Bonding Curve laufen,
+    # siehe geckoterminal_client.parse_pool)
+    locked_liquidity_percent_high: float = 50.0
+    locked_liquidity_percent_medium: float = 80.0
 
 
 DEFAULT_RISK_THRESHOLDS = RiskThresholds()

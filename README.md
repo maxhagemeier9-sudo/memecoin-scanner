@@ -43,7 +43,12 @@ Seit 2026-09-10 (Birdeye-Compute-Units-Kontingent bis 2026-10-08 erschöpft):
 - Token-2022-Extensions: TransferHook, PermanentDelegate, NonTransferable, Transfer-Steuer,
   veränderbare Token-Metadata (updateAuthority gesetzt - Ersteller kann Name/Symbol/Bild später
   ändern, klassischer Rebrand-Scam-Trick)
-- Holder-Konzentration (Top-10-%, aus `getTokenLargestAccounts` + Supply selbst berechnet)
+- Holder-Konzentration (Top-10-%, aus `getTokenLargestAccounts` + Supply selbst berechnet) -
+  HOCH ab 70%, MITTEL ab 50% (siehe `RiskThresholds.top10_percent_high/_medium`)
+- Liquiditäts-Sperre (`locked_liquidity_percentage` von GeckoTerminal) - HOCH unter 50% gesperrt,
+  MITTEL unter 80%; nur verfügbar, sobald ein Coin einen klassischen LP-Token hat (nicht während
+  der Bonding-Curve-Phase, z.B. frische pump.fun-Launches vor der Migration - dort strukturell
+  kein Rug-Vektor über LP-Entzug, da die Liquidität im Programm gebunden ist)
 - Liquidität, Volumen/Liquidität-Verhältnis, Wash-Trading-Muster (Trades/Wallet)
 - Liquiditäts-Trend seit dem letzten Scan derselben Adresse
 - Creator-Reputation: wie viele andere Coins dieselbe Creator-Wallet schon gelistet hat ("Serial-Launcher")
@@ -51,9 +56,12 @@ Seit 2026-09-10 (Birdeye-Compute-Units-Kontingent bis 2026-10-08 erschöpft):
 **Bewusst NICHT (mehr) geprüft:**
 - Gesamt-Holder-Zahl (nur noch Top-10-Konzentration - `getTokenLargestAccounts` liefert nur die
   größten 20 Accounts, keine Gesamtzahl; der Score-Faktor ist auf Gewicht 0 gesetzt statt entfernt)
-- Liquiditäts-Sperren/-Burns (die meisten frischen Coins laufen noch auf einer Bonding Curve ohne klassischen LP-Token)
 - Tatsächliche Ausführung von Transfer-Hook-Logik (nur ob die Extension aktiv ist, nicht was sie tut)
 - Contract-Level-Honeypot-Simulation (bräuchte eine echte Swap-Transaktion)
+
+Jede Telegram-Nachricht (Scan-Zusammenfassung, reguläre Alerts, Rising-Coin-Alerts) enthält,
+sofern eine Pool-Adresse bekannt ist, einen direkten Link zur Chart-Ansicht auf GeckoTerminal
+(`risk_scan.pool_url`) - zum schnellen Gegenchecken von Hype/FOMO direkt aus der Nachricht heraus.
 
 ## Lokal einrichten
 

@@ -7,6 +7,7 @@ from risk import (
     evaluate_creator_history,
     evaluate_holder_concentration,
     evaluate_liquidity_and_trading,
+    evaluate_liquidity_lock,
     evaluate_liquidity_trend,
     evaluate_token_extensions,
 )
@@ -126,6 +127,28 @@ def test_extreme_transfer_fee_is_hoch():
     findings = evaluate_token_extensions(frozenset({"transferFeeConfig"}), 2500, THRESHOLDS)
     assert len(findings) == 1
     assert findings[0].severity == Severity.HOCH
+
+
+def test_unknown_liquidity_lock_status_yields_no_finding():
+    # None = kein klassischer LP-Token (z.B. noch auf Bonding Curve) - kein Risiko-Signal
+    assert evaluate_liquidity_lock(None, THRESHOLDS) == []
+
+
+def test_well_locked_liquidity_yields_no_finding():
+    assert evaluate_liquidity_lock(95.0, THRESHOLDS) == []
+
+
+def test_partially_locked_liquidity_is_mittel():
+    findings = evaluate_liquidity_lock(65.0, THRESHOLDS)
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.MITTEL
+
+
+def test_mostly_unlocked_liquidity_is_hoch():
+    findings = evaluate_liquidity_lock(20.0, THRESHOLDS)
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.HOCH
+    assert "Rug-Pull" in findings[0].message
 
 
 def test_low_liquidity_is_hoch():
