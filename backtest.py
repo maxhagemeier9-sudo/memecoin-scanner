@@ -16,16 +16,26 @@ jünger ist als `horizon_minutes`, gibt es noch keine Kerze am vollen Horizont
 - backtest_snapshot liefert dann die Preisveränderung bis zur aktuellsten
 verfügbaren Kerze (kürzerer, tatsächlicher Zeitraum statt des Zielhorizonts).
 Das steht im Ergebnis (elapsed_minutes).
+
+Zwei Wege, Backtests zu erzeugen:
+- run_backtest(): testet ALLE bekannten Erstsichtungen auf einmal zurück,
+  nichts wird gespeichert - für manuelle/lokale Auswertung (siehe main()).
+- maybe_run_daily_backtest_batch(): läuft automatisch 1x/Tag aus
+  monitor.scan_once(), testet nur reifgewordene (Horizont erreicht), noch
+  nicht getestete Coins in kleinen Portionen (BACKTEST_DAILY_LIMIT) zurück
+  und speichert die Ergebnisse dauerhaft in backtest_results - Grundlage
+  für die Backtest-Auswertung im Dashboard (dashboard_export.py).
 """
 from __future__ import annotations
 
+import sqlite3
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 import history
-from config import BACKTEST_HORIZON_MINUTES, BACKTEST_THROTTLE_SECONDS
+from config import BACKTEST_DAILY_LIMIT, BACKTEST_HORIZON_MINUTES, BACKTEST_THROTTLE_SECONDS
 from geckoterminal_client import GeckoTerminalAPIError, GeckoTerminalClient
 
 
@@ -91,6 +101,141 @@ def backtest_snapshot(
         return_percent=return_percent,
         elapsed_minutes=elapsed_minutes,
     )
+
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS backtest_results (
+    address TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL,
+    first_score INTEGER NOT NULL,
+    first_risk_level TEXT NOT NULL,
+    entry_price REAL NOT NULL,
+    exit_price REAL NOT NULL,
+    return_percent REAL NOT NULL,
+    elapsed_minutes REAL NOT NULL,
+    backtested_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS backtest_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+"""
+
+_RESULT_COLUMNS = (
+    "address, symbol, first_seen_at, first_score, first_risk_level, "
+    "entry_price, exit_price, return_percent, elapsed_minutes"
+)
+
+_DAILY_BACKTEST_META_KEY = "last_daily_backtest_date"
+# Andere Stunde als der Paper-Trading-Tagesreport (siehe paper_trading.py),
+# damit sich beide taeglichen Batch-Jobs nicht denselben Scan-Zyklus teilen.
+_DAILY_BACKTEST_HOUR_UTC = 9
+
+
+def ensure_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(_SCHEMA)
+    conn.commit()
+
+
+def _get_meta(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM backtest_meta WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO backtest_meta (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+    conn.commit()
+
+
+def _store_result(conn: sqlite3.Connection, result: BacktestResult) -> None:
+    conn.execute(
+        f"""INSERT OR IGNORE INTO backtest_results ({_RESULT_COLUMNS}, backtested_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            result.address, result.symbol, result.first_seen_at, result.first_score,
+            result.first_risk_level, result.entry_price, result.exit_price,
+            result.return_percent, result.elapsed_minutes,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    conn.commit()
+
+
+def stored_results(conn: sqlite3.Connection) -> list[BacktestResult]:
+    """Alle bisher dauerhaft gespeicherten Backtest-Ergebnisse (siehe
+    maybe_run_daily_backtest_batch) - im Gegensatz zu run_backtest() kein
+    erneuter API-Call, liest nur, was bereits berechnet wurde."""
+    rows = conn.execute(f"SELECT {_RESULT_COLUMNS} FROM backtest_results").fetchall()
+    return [BacktestResult(*row) for row in rows]
+
+
+def run_daily_backtest_batch(
+    client: GeckoTerminalClient,
+    conn: sqlite3.Connection,
+    horizon_minutes: int = BACKTEST_HORIZON_MINUTES,
+    limit: int = BACKTEST_DAILY_LIMIT,
+    now: datetime | None = None,
+) -> list[BacktestResult]:
+    """Testet bis zu `limit` NOCH NICHT zurückgetestete Coins zurück, deren
+    Erstsichtung mindestens `horizon_minutes` zurückliegt (der Zielhorizont
+    also tatsächlich erreicht ist), und speichert die Ergebnisse dauerhaft
+    (siehe _store_result) - im Gegensatz zu run_backtest() nicht "alles auf
+    einmal", sondern häppchenweise über mehrere Tage, um GeckoTerminal-OHLCV-
+    Calls zu begrenzen."""
+    ensure_schema(conn)
+    reference_now = now or datetime.now(timezone.utc)
+    already_done = {r.address for r in stored_results(conn)}
+
+    candidates = []
+    for snapshot in history.all_first_snapshots(conn):
+        if snapshot.address in already_done or snapshot.price is None or not snapshot.pool_address:
+            continue
+        first_time = datetime.fromisoformat(snapshot.scanned_at)
+        if (reference_now - first_time).total_seconds() / 60 < horizon_minutes:
+            continue
+        candidates.append(snapshot)
+        if len(candidates) >= limit:
+            break
+
+    results = []
+    for snapshot in candidates:
+        result = backtest_snapshot(client, snapshot, horizon_minutes)
+        if result is not None:
+            _store_result(conn, result)
+            results.append(result)
+        client.throttle()
+
+    return results
+
+
+def maybe_run_daily_backtest_batch(
+    client: GeckoTerminalClient,
+    conn: sqlite3.Connection,
+    now: datetime | None = None,
+    limit: int = BACKTEST_DAILY_LIMIT,
+) -> list[BacktestResult]:
+    """Läuft höchstens einmal pro UTC-Kalendertag, zusätzlich auf ein festes
+    Stunden-Fenster begrenzt (_DAILY_BACKTEST_HOUR_UTC) - analog zu
+    paper_trading.maybe_send_daily_summary, damit nicht bei jedem 10-Minuten-
+    Scan neu geprüft wird."""
+    ensure_schema(conn)
+    reference_now = now or datetime.now(timezone.utc)
+    if reference_now.hour != _DAILY_BACKTEST_HOUR_UTC:
+        return []
+
+    today = reference_now.date().isoformat()
+    if _get_meta(conn, _DAILY_BACKTEST_META_KEY) == today:
+        return []
+
+    results = run_daily_backtest_batch(client, conn, limit=limit, now=reference_now)
+    _set_meta(conn, _DAILY_BACKTEST_META_KEY, today)
+    return results
 
 
 def run_backtest(

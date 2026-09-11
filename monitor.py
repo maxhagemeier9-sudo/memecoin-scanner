@@ -9,7 +9,11 @@ jeden Alert eine Paper-Trading-Position eröffnet, sondern nur für den am
 besten bewerteten Kandidaten (höchster Score) - so bleibt das Paper-Depot
 fokussiert auf das jeweils stärkste Signal statt bei jedem Treffer zu
 streuen. Alerts (Telegram) werden davon unabhängig weiterhin für jeden
-qualifizierenden Coin verschickt.
+qualifizierenden Coin verschickt. Einmal täglich (anderes Stunden-Fenster
+als der Paper-Trading-Report) läuft außerdem ein begrenzter Backtest-Batch
+(siehe backtest.maybe_run_daily_backtest_batch) - testet reifgewordene
+Erstsichtungen gegen die echte Kursentwicklung zurück und speichert die
+Ergebnisse dauerhaft.
 """
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
+import backtest
 import history
 import paper_trading
 from alerts import alert
@@ -157,6 +162,10 @@ def scan_once(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:
             print(f"   (Paper-Trade-Telegram fehlgeschlagen: {exc})")
 
     paper_trading.maybe_send_daily_summary(conn)
+
+    backtested = backtest.maybe_run_daily_backtest_batch(client, conn)
+    if backtested:
+        print(f"   Backtest: {len(backtested)} Coin(s) neu zurückgetestet")
 
 
 def run_monitor(client: GeckoTerminalClient, conn: sqlite3.Connection) -> None:

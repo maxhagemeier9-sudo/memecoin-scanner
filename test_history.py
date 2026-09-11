@@ -6,6 +6,7 @@ from history import (
     all_first_snapshots,
     connect,
     creator_history,
+    creator_rugged_coin_count,
     first_snapshot,
     has_been_alerted,
     has_been_rising_alerted,
@@ -72,6 +73,56 @@ def test_creator_history_returns_only_matching_creator(conn):
 
 def test_creator_history_is_empty_for_unknown_creator(conn):
     assert creator_history(conn, "never-seen") == []
+
+
+def test_creator_rugged_coin_count_detects_a_liquidity_crash(conn):
+    record_snapshot(conn, _snapshot(
+        address="a1", creator_authority="creatorX",
+        scanned_at="2026-09-09T00:00:00+00:00", liquidity_usd=10_000.0,
+    ))
+    record_snapshot(conn, _snapshot(
+        address="a1", creator_authority="creatorX",
+        scanned_at="2026-09-09T01:00:00+00:00", liquidity_usd=500.0,  # -95%
+    ))
+
+    count = creator_rugged_coin_count(conn, "creatorX", exclude_address="new-coin", crash_threshold_percent=50.0)
+    assert count == 1
+
+
+def test_creator_rugged_coin_count_ignores_coins_that_held_liquidity(conn):
+    record_snapshot(conn, _snapshot(
+        address="a1", creator_authority="creatorX",
+        scanned_at="2026-09-09T00:00:00+00:00", liquidity_usd=10_000.0,
+    ))
+    record_snapshot(conn, _snapshot(
+        address="a1", creator_authority="creatorX",
+        scanned_at="2026-09-09T01:00:00+00:00", liquidity_usd=9_500.0,  # -5%
+    ))
+
+    count = creator_rugged_coin_count(conn, "creatorX", exclude_address="new-coin", crash_threshold_percent=50.0)
+    assert count == 0
+
+
+def test_creator_rugged_coin_count_ignores_single_snapshot_coins(conn):
+    # nur EIN Snapshot -> kein Trend feststellbar, zaehlt nicht als gerugged
+    record_snapshot(conn, _snapshot(address="a1", creator_authority="creatorX", liquidity_usd=10_000.0))
+
+    count = creator_rugged_coin_count(conn, "creatorX", exclude_address="new-coin", crash_threshold_percent=50.0)
+    assert count == 0
+
+
+def test_creator_rugged_coin_count_excludes_the_given_address(conn):
+    record_snapshot(conn, _snapshot(
+        address="new-coin", creator_authority="creatorX",
+        scanned_at="2026-09-09T00:00:00+00:00", liquidity_usd=10_000.0,
+    ))
+    record_snapshot(conn, _snapshot(
+        address="new-coin", creator_authority="creatorX",
+        scanned_at="2026-09-09T01:00:00+00:00", liquidity_usd=100.0,  # waere ein Crash, aber ausgeschlossen
+    ))
+
+    count = creator_rugged_coin_count(conn, "creatorX", exclude_address="new-coin", crash_threshold_percent=50.0)
+    assert count == 0
 
 
 def test_snapshots_for_different_addresses_are_independent(conn):

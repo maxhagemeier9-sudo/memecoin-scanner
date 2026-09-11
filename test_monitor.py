@@ -2,6 +2,8 @@
 kein echter Sleep/Loop, kein echter Telegram-Versand."""
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import paper_trading
 from history import Snapshot, connect, has_been_alerted, has_been_rising_alerted, mark_alerted, mark_rising_alerted
 from monitor import scan_once
@@ -9,6 +11,20 @@ from risk import RiskFinding, Severity, build_report
 from risk_scan import TokenAssessment
 from score import Score
 from telegram_alerts import TelegramError
+
+
+@pytest.fixture(autouse=True)
+def _no_real_daily_jobs():
+    """Die taeglichen Batch-Jobs (Paper-Trading-Report, Backtest) haengen von
+    der aktuellen UTC-Stunde ab (siehe paper_trading._DAILY_SUMMARY_HOUR_UTC/
+    backtest._DAILY_BACKTEST_HOUR_UTC) - ohne diesen Autouse-Mock wuerden sie
+    an genau EINER von 24 Stunden am Tag fuer echt laufen (echter Telegram-
+    Call bzw. AttributeError auf einem Dummy-Client) und Tests je nach
+    Tageszeit flaky machen. Einzelne Tests koennen das Ziel-Patch trotzdem
+    weiter selbst ueberschreiben (siehe test_scan_once_triggers_the_daily_*)."""
+    with patch("monitor.paper_trading.maybe_send_daily_summary", return_value=False), \
+         patch("monitor.backtest.maybe_run_daily_backtest_batch", return_value=[]):
+        yield
 
 
 def _result(symbol, address, score_total, findings=None, price=None, pool_address=None):
@@ -384,6 +400,25 @@ def test_scan_once_triggers_the_daily_paper_trading_summary(
     try:
         scan_once(client=MagicMock(), conn=conn)
         mock_daily_summary.assert_called_once_with(conn)
+    finally:
+        conn.close()
+
+
+@patch("monitor.backtest.maybe_run_daily_backtest_batch")
+@patch("monitor.send_telegram_message")
+@patch("monitor.recheck_watchlist")
+@patch("monitor.alert")
+@patch("monitor.scan_new_coins")
+def test_scan_once_triggers_the_daily_backtest_batch(
+    mock_scan, mock_alert, mock_recheck, mock_send, mock_backtest_batch
+):
+    mock_scan.return_value = []
+    mock_recheck.return_value = []
+    client = MagicMock()
+    conn = connect(db_path=":memory:")
+    try:
+        scan_once(client=client, conn=conn)
+        mock_backtest_batch.assert_called_once_with(client, conn)
     finally:
         conn.close()
 

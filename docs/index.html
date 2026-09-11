@@ -143,6 +143,16 @@
   </section>
 
   <section>
+    <div class="section-head"><h2>🔬 Backtest: Score vs. echte Kursentwicklung</h2></div>
+    <div class="table-scroll"><table id="backtest-table"><thead><tr>
+      <th>Risiko bei Erstsichtung</th><th>Anzahl</th><th>Ø Rendite</th><th>Min</th><th>Max</th>
+    </tr></thead><tbody></tbody></table></div>
+    <div class="empty" id="backtest-empty" hidden>
+      Noch keine Backtest-Ergebnisse - läuft automatisch einmal täglich für reifgewordene Coins.
+    </div>
+  </section>
+
+  <section>
     <div class="section-head">
       <h2>🕓 Zuletzt gescannt</h2>
       <input class="filter" id="scan-filter" placeholder="Symbol/Adresse filtern…">
@@ -300,6 +310,23 @@
     }).join("");
   }
 
+  var RISK_LEVEL_ORDER = ["NIEDRIG", "MITTEL", "HOCH", "KRITISCH"];
+  function renderBacktest(bt) {
+    var tbody = document.querySelector("#backtest-table tbody");
+    var byLevel = bt.by_risk_level || {};
+    var levels = RISK_LEVEL_ORDER.filter(function (l) { return byLevel[l]; });
+    document.getElementById("backtest-empty").hidden = levels.length > 0;
+    tbody.innerHTML = levels.map(function (level) {
+      var s = byLevel[level];
+      var cls = s.avg_return_percent >= 0 ? "pos" : "neg";
+      return "<tr><td>" + riskBadge(level) + "</td>" +
+        "<td>" + s.count + "</td>" +
+        "<td class='pnl " + cls + "'>" + s.avg_return_percent.toFixed(1) + "%</td>" +
+        "<td>" + s.min_return_percent.toFixed(0) + "%</td>" +
+        "<td>" + s.max_return_percent.toFixed(0) + "%</td></tr>";
+    }).join("");
+  }
+
   var allScans = [];
   function renderScans(scans) {
     var tbody = document.querySelector("#scans-table tbody");
@@ -338,6 +365,7 @@
     renderOpenTrades((data.paper_trading || {}).open_positions || []);
     renderClosedTrades((data.paper_trading || {}).closed_trades || []);
     renderAlerts(data.recent_alerts || []);
+    renderBacktest(data.backtest || {});
     allScans = data.recent_snapshots || [];
     renderScans(allScans);
   }

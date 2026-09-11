@@ -3,7 +3,9 @@ Dependency). Macht aufeinanderfolgende Scans derselben Adresse vergleichbar
 und ist Grundlage für zwei Signale in risk.py:
 - evaluate_liquidity_trend: Liquiditäts-Veränderung seit dem letzten Scan.
 - evaluate_creator_history: wie viele andere Coins dieselbe Creator-Wallet
-  (Token-2022 updateAuthority) schon gelistet hat.
+  (Token-2022 updateAuthority) schon gelistet hat, UND (creator_rugged_coin_
+  count) wie viele davon nachweislich einen Liquiditäts-Einbruch hatten -
+  ein tatsächliches Outcome-Signal statt nur einer Zählung.
 
 Jeder Scan fügt eine neue Zeile hinzu (kein Überschreiben), damit die
 Historie über die Zeit wächst statt nur den letzten Stand zu kennen.
@@ -154,6 +156,40 @@ def creator_history(conn: sqlite3.Connection, creator_authority: str) -> list[Sn
         (creator_authority,),
     ).fetchall()
     return [Snapshot(*row) for row in rows]
+
+
+def creator_rugged_coin_count(
+    conn: sqlite3.Connection,
+    creator_authority: str,
+    exclude_address: str,
+    crash_threshold_percent: float,
+) -> int:
+    """Zählt, bei wie vielen ANDEREN Coins derselben Creator-Wallet die
+    Liquidität vom ersten zum bisher letzten bekannten Snapshot um mindestens
+    crash_threshold_percent eingebrochen ist - im Gegensatz zu
+    creator_history() (reine Zählung "wie viele Coins hat die Wallet
+    gelistet") ein Signal für das TATSÄCHLICHE Ergebnis dieser früheren
+    Coins. Coins mit nur einem Snapshot (keine Wiederholung, also kein
+    Trend feststellbar) zählen bewusst NICHT als gerugged, um keine
+    Fehlalarme aus zu dünnen Daten zu erzeugen."""
+    by_address: dict[str, list[Snapshot]] = {}
+    for snapshot in creator_history(conn, creator_authority):
+        if snapshot.address == exclude_address:
+            continue
+        by_address.setdefault(snapshot.address, []).append(snapshot)
+
+    rugged = 0
+    for snapshots in by_address.values():
+        first, last = snapshots[0], snapshots[-1]
+        if first.liquidity_usd is None or first.liquidity_usd <= 0 or last.liquidity_usd is None:
+            continue
+        if first is last:
+            continue
+        drop_percent = (first.liquidity_usd - last.liquidity_usd) / first.liquidity_usd * 100
+        if drop_percent >= crash_threshold_percent:
+            rugged += 1
+
+    return rugged
 
 
 def first_snapshot(conn: sqlite3.Connection, address: str) -> Snapshot | None:

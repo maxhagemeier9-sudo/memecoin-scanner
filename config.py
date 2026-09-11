@@ -167,6 +167,11 @@ TELEGRAM_ENABLED = bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
 # Kursentwicklung geprüft wird, und Pause zwischen den OHLCV-Calls.
 BACKTEST_HORIZON_MINUTES = 60
 BACKTEST_THROTTLE_SECONDS = 0.5
+# maybe_run_daily_backtest_batch(): max. Coins pro Tag neu zurückgetestet
+# (begrenzt GeckoTerminal-OHLCV-Calls) - läuft automatisch 1x/Tag in
+# monitor.scan_once(), Ergebnisse werden dauerhaft in backtest_results
+# gespeichert statt bei jedem Lauf neu (und teuer) berechnet zu werden.
+BACKTEST_DAILY_LIMIT = 30
 
 # Paper Trading (paper_trading.py): virtuelle Positionsgröße pro "Trade" (nur
 # fürs P&L in USD, es fließt kein echtes Geld) sowie Exit-Regeln.

@@ -171,6 +171,35 @@ def test_serial_launcher_pattern_is_detected_via_creator_history(mock_authoritie
 
 @patch("risk_scan.get_top10_concentration")
 @patch("risk_scan.get_mint_authorities")
+def test_creator_with_a_previously_rugged_coin_is_kritisch(mock_authorities, mock_top10):
+    mock_top10.return_value = 10.0
+    conn = connect(db_path=":memory:")
+    try:
+        record_snapshot(conn, Snapshot(
+            address="rugged-addr", symbol="RUGGED", scanned_at="2026-09-09T00:00:00+00:00",
+            liquidity_usd=50_000, volume_24h_usd=1_000, holder_count=None,
+            top10_percent=50.0, score_total=50, risk_level="MITTEL",
+            creator_authority="known-rugger",
+        ))
+        record_snapshot(conn, Snapshot(
+            address="rugged-addr", symbol="RUGGED", scanned_at="2026-09-09T01:00:00+00:00",
+            liquidity_usd=500, volume_24h_usd=100, holder_count=None,  # -99%
+            top10_percent=90.0, score_total=10, risk_level="KRITISCH",
+            creator_authority="known-rugger",
+        ))
+
+        mock_authorities.return_value = MintAuthorities(
+            mint_authority=None, freeze_authority=None, update_authority="known-rugger", total_supply=1_000_000.0,
+        )
+        assessment = assess_listing(_listing(token_address="new-addr"), conn=conn)
+        assert any("Rug-Pull-Muster" in f.message for f in assessment.report.findings)
+        assert assessment.report.overall == Severity.KRITISCH
+    finally:
+        conn.close()
+
+
+@patch("risk_scan.get_top10_concentration")
+@patch("risk_scan.get_mint_authorities")
 def test_assess_listing_records_a_new_snapshot_with_pool_address(mock_authorities, mock_top10):
     mock_authorities.return_value = MintAuthorities(mint_authority=None, freeze_authority=None, total_supply=1_000_000.0)
     mock_top10.return_value = 10.0

@@ -2,6 +2,8 @@
 API-Calls, laufen komplett offline auf einer In-Memory-SQLite-DB."""
 import pytest
 
+from backtest import BacktestResult
+from backtest import ensure_schema as ensure_backtest_schema
 from dashboard_export import build_dashboard_data
 from history import Snapshot, connect, mark_alerted, mark_rising_alerted, record_snapshot
 from paper_trading import close_trade, ensure_schema, open_trade, open_trades
@@ -97,6 +99,32 @@ def test_paper_trading_section_includes_open_and_closed_positions(conn):
     assert len(data["paper_trading"]["closed_trades"]) == 1
     assert data["paper_trading"]["closed_trades"][0]["exit_reason"] == "TAKE_PROFIT"
     assert data["paper_trading"]["summary"]["count"] == 1
+
+
+def test_backtest_section_reflects_stored_results(conn):
+    from datetime import datetime, timezone
+    from unittest.mock import MagicMock
+
+    from backtest import run_daily_backtest_batch
+
+    record_snapshot(conn, _snapshot(
+        address="a1", scanned_at="2026-09-11T08:00:00+00:00", pool_address="pool1", price=1.0,
+    ))
+    client = MagicMock()
+    client.get_ohlcv.return_value = [[1_757_376_600, 1.0, 1.0, 1.0, 2.0, 100.0]]  # +100%
+    run_daily_backtest_batch(client, conn, horizon_minutes=60, now=datetime(2026, 9, 11, 12, 0, tzinfo=timezone.utc))
+
+    data = build_dashboard_data(conn)
+
+    assert data["backtest"]["total_backtested"] == 1
+    assert "MITTEL" in data["backtest"]["by_risk_level"]
+
+
+def test_backtest_section_is_empty_without_any_backtests(conn):
+    ensure_backtest_schema(conn)
+    data = build_dashboard_data(conn)
+    assert data["backtest"]["total_backtested"] == 0
+    assert data["backtest"]["by_risk_level"] == {}
 
 
 def test_empty_database_produces_valid_empty_structure(conn):

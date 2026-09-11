@@ -1,7 +1,15 @@
 """Tests für die Backtesting-Engine - gemockt, kein echter OHLCV-Abruf."""
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-from backtest import backtest_snapshot, run_backtest, summarize_by_risk_level
+from backtest import (
+    backtest_snapshot,
+    maybe_run_daily_backtest_batch,
+    run_backtest,
+    run_daily_backtest_batch,
+    stored_results,
+    summarize_by_risk_level,
+)
 from geckoterminal_client import GeckoTerminalAPIError
 from history import Snapshot, connect, record_snapshot
 
@@ -105,6 +113,99 @@ def test_run_backtest_skips_snapshots_without_pool_address():
         client = _client_with_candles([_candle(1_757_376_600, 2.0)])
         results = run_backtest(client, conn)
         assert results == []
+    finally:
+        conn.close()
+
+
+def test_run_daily_backtest_batch_skips_snapshots_younger_than_horizon():
+    conn = connect(db_path=":memory:")
+    try:
+        now = datetime(2026, 9, 11, 12, 0, tzinfo=timezone.utc)
+        record_snapshot(conn, _snapshot(address="a1", scanned_at="2026-09-11T11:50:00+00:00"))  # nur 10 Min alt
+
+        client = _client_with_candles([_candle(1_757_376_600, 2.0)])
+        results = run_daily_backtest_batch(client, conn, horizon_minutes=60, now=now)
+
+        assert results == []
+    finally:
+        conn.close()
+
+
+def test_run_daily_backtest_batch_tests_mature_snapshots_and_persists_them():
+    conn = connect(db_path=":memory:")
+    try:
+        now = datetime(2026, 9, 11, 12, 0, tzinfo=timezone.utc)
+        record_snapshot(conn, _snapshot(address="a1", scanned_at="2026-09-11T10:00:00+00:00"))  # 2h alt
+
+        client = _client_with_candles([_candle(1_757_376_600, 2.0)])
+        results = run_daily_backtest_batch(client, conn, horizon_minutes=60, now=now)
+
+        assert len(results) == 1
+        assert results[0].address == "a1"
+        assert len(stored_results(conn)) == 1
+    finally:
+        conn.close()
+
+
+def test_run_daily_backtest_batch_never_retests_an_already_backtested_address():
+    conn = connect(db_path=":memory:")
+    try:
+        now = datetime(2026, 9, 11, 12, 0, tzinfo=timezone.utc)
+        record_snapshot(conn, _snapshot(address="a1", scanned_at="2026-09-11T10:00:00+00:00"))
+
+        client = _client_with_candles([_candle(1_757_376_600, 2.0)])
+        run_daily_backtest_batch(client, conn, horizon_minutes=60, now=now)
+        second_run = run_daily_backtest_batch(client, conn, horizon_minutes=60, now=now)
+
+        assert second_run == []
+        assert len(stored_results(conn)) == 1
+    finally:
+        conn.close()
+
+
+def test_run_daily_backtest_batch_respects_the_limit():
+    conn = connect(db_path=":memory:")
+    try:
+        now = datetime(2026, 9, 11, 12, 0, tzinfo=timezone.utc)
+        for i in range(5):
+            record_snapshot(conn, _snapshot(address=f"a{i}", scanned_at="2026-09-11T10:00:00+00:00"))
+
+        client = _client_with_candles([_candle(1_757_376_600, 2.0)])
+        results = run_daily_backtest_batch(client, conn, horizon_minutes=60, limit=2, now=now)
+
+        assert len(results) == 2
+    finally:
+        conn.close()
+
+
+def test_maybe_run_daily_backtest_batch_only_runs_in_its_hour_window():
+    conn = connect(db_path=":memory:")
+    try:
+        outside_window = datetime(2026, 9, 11, 12, 0, tzinfo=timezone.utc)
+        record_snapshot(conn, _snapshot(address="a1", scanned_at="2026-09-11T10:00:00+00:00"))
+
+        client = _client_with_candles([_candle(1_757_376_600, 2.0)])
+        results = maybe_run_daily_backtest_batch(client, conn, now=outside_window)
+
+        assert results == []
+        assert stored_results(conn) == []
+    finally:
+        conn.close()
+
+
+def test_maybe_run_daily_backtest_batch_runs_once_per_day():
+    conn = connect(db_path=":memory:")
+    try:
+        in_window = datetime(2026, 9, 11, 9, 5, tzinfo=timezone.utc)
+        record_snapshot(conn, _snapshot(address="a1", scanned_at="2026-09-11T07:00:00+00:00"))
+        record_snapshot(conn, _snapshot(address="a2", scanned_at="2026-09-11T07:00:00+00:00"))
+
+        client = _client_with_candles([_candle(1_757_376_600, 2.0)])
+        first_run = maybe_run_daily_backtest_batch(client, conn, now=in_window)
+        second_run = maybe_run_daily_backtest_batch(client, conn, now=in_window)
+
+        assert len(first_run) == 2
+        assert second_run == []  # bereits heute gelaufen, obwohl a2 evtl. noch offen waere
     finally:
         conn.close()
 

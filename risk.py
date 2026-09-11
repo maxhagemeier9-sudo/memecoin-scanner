@@ -207,13 +207,25 @@ def evaluate_liquidity_and_trading(
 def evaluate_creator_history(
     previous_coin_count: int,
     thresholds: RiskThresholds = DEFAULT_RISK_THRESHOLDS,
+    rugged_coin_count: int = 0,
 ) -> list[RiskFinding]:
     """previous_coin_count: Anzahl ANDERER Coins in unserer lokalen Historie
     mit derselben Creator-Wallet (Token-2022 updateAuthority, siehe
-    solana_rpc.py). Reines Zähl-Signal ("Serial-Launcher"), keine
-    Outcome-Bewertung - dafür bräuchte es Langzeit-Tracking, ob frühere
-    Coins derselben Wallet später gerugged wurden.
+    solana_rpc.py) - reines Zähl-Signal ("Serial-Launcher").
+
+    rugged_coin_count: davon, wie viele bei einem WIEDERHOLTEN Scan bereits
+    einen Liquiditäts-Einbruch (siehe history.creator_rugged_coin_count)
+    gezeigt haben - ein tatsächliches Outcome-Signal statt nur eine Zählung,
+    und deutlich aussagekräftiger: ein Serial-Launcher mit durchweg stabilen
+    früheren Coins ist ein anderes Risiko als einer mit einer Rug-Spur.
     """
+    if rugged_coin_count > 0:
+        return [RiskFinding(
+            Severity.KRITISCH,
+            f"Creator-Wallet hat bei {rugged_coin_count} von {previous_coin_count} früheren Coins "
+            "bereits einen Liquiditäts-Einbruch verursacht (Rug-Pull-Muster)",
+        )]
+
     if previous_coin_count >= thresholds.serial_launcher_count_high:
         return [RiskFinding(
             Severity.HOCH,

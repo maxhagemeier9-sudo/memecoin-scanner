@@ -13,6 +13,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+import backtest
 import history
 import paper_trading
 from risk_scan import pool_url
@@ -111,8 +112,17 @@ def _trade_dict(trade: paper_trading.PaperTrade) -> dict:
     }
 
 
+def _backtest_section(conn: sqlite3.Connection) -> dict:
+    results = backtest.stored_results(conn)
+    return {
+        "total_backtested": len(results),
+        "by_risk_level": backtest.summarize_by_risk_level(results),
+    }
+
+
 def build_dashboard_data(conn: sqlite3.Connection) -> dict:
     paper_trading.ensure_schema(conn)
+    backtest.ensure_schema(conn)
     open_trades = paper_trading.open_trades(conn)
     closed_trades = paper_trading.closed_trades(conn)
     summary = paper_trading.summarize(closed_trades)
@@ -127,6 +137,7 @@ def build_dashboard_data(conn: sqlite3.Connection) -> dict:
             "closed_trades": [_trade_dict(t) for t in closed_trades[-CLOSED_TRADES_LIMIT:]],
             "summary": summary,
         },
+        "backtest": _backtest_section(conn),
     }
 
 

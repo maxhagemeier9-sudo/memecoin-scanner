@@ -52,7 +52,10 @@ Seit 2026-09-10 (Birdeye-Compute-Units-Kontingent bis 2026-10-08 erschöpft):
   kein Rug-Vektor über LP-Entzug, da die Liquidität im Programm gebunden ist)
 - Liquidität, Volumen/Liquidität-Verhältnis, Wash-Trading-Muster (Trades/Wallet)
 - Liquiditäts-Trend seit dem letzten Scan derselben Adresse
-- Creator-Reputation: wie viele andere Coins dieselbe Creator-Wallet schon gelistet hat ("Serial-Launcher")
+- Creator-Reputation: wie viele andere Coins dieselbe Creator-Wallet schon gelistet hat
+  ("Serial-Launcher"), UND ob nachweislich einer davon einen Liquiditäts-Einbruch hatte
+  (`history.creator_rugged_coin_count`) - ein tatsächliches Rug-Pull-Muster wiegt schwerer
+  (KRITISCH) als die reine Zählung bisheriger Coins
 
 **Bewusst NICHT (mehr) geprüft:**
 - Gesamt-Holder-Zahl (nur noch Top-10-Konzentration - `getTokenLargestAccounts` liefert nur die
@@ -92,11 +95,18 @@ Alert-Kandidaten (Score) des jeweiligen Laufs, nicht für jeden einzelnen Alert.
 UTC-Kalendertag verschickt `paper_trading.maybe_send_daily_summary()` zusätzlich einen kurzen
 Performance-Report (offene/geschlossene Positionen, Win-Rate, Ø P&L, Gesamt-P&L) an Telegram.
 
+Ebenfalls einmal pro Tag (anderes Stunden-Fenster, damit sich beide Jobs nicht überschneiden)
+läuft `backtest.maybe_run_daily_backtest_batch()`: testet bis zu `BACKTEST_DAILY_LIMIT` reif
+gewordene Erstsichtungen (Zielhorizont erreicht, noch nicht getestet) gegen die echte
+Kursentwicklung zurück und speichert die Ergebnisse dauerhaft in `backtest_results` - Grundlage
+für die Backtest-Auswertung im Dashboard.
+
 ## Dashboard (GitHub Pages)
 
 `docs/index.html` ist ein eigenständiges Web-Dashboard (kein Node/Build-Step, reines HTML/CSS/JS)
-mit Ranking, offenen/geschlossenen Paper-Trades, einer P&L-Equity-Kurve, den letzten Alerts und
-einer filterbaren Liste aller zuletzt gescannten Coins - Light/Dark-Theme, auto-refresh alle 45s.
+mit Ranking, offenen/geschlossenen Paper-Trades, einer P&L-Equity-Kurve, den letzten Alerts, der
+Backtest-Auswertung je Risiko-Level und einer filterbaren Liste aller zuletzt gescannten Coins -
+Light/Dark-Theme, auto-refresh alle 45s.
 Die Daten kommen aus `docs/data.json`, das `dashboard_export.py` als letzter CI-Schritt aus
 `history.sqlite3` neu schreibt und direkt per `actions/deploy-pages` veröffentlicht (kein
 Git-Commit pro Lauf, sonst würde die Historie mit einem Daten-Commit alle ~10 Minuten zumüllen).

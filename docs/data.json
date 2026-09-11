@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-11T10:30:59.087971+00:00",
+  "generated_at": "2026-09-11T11:06:47.100488+00:00",
   "stats": {
     "total_snapshots": 442,
     "total_unique_coins": 381,
@@ -589,5 +589,9 @@
       "total_pnl_usd": 0.0,
       "avg_pnl_percent": 0.0
     }
+  },
+  "backtest": {
+    "total_backtested": 0,
+    "by_risk_level": {}
   }
 }

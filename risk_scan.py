@@ -121,7 +121,12 @@ def assess_listing(listing: PoolListing, conn: sqlite3.Connection | None = None)
         if update_authority is not None:
             creator_coins = history.creator_history(conn, update_authority)
             previous_coin_count = len({s.address for s in creator_coins if s.address != listing.token_address})
-            findings += evaluate_creator_history(previous_coin_count)
+            rugged_coin_count = history.creator_rugged_coin_count(
+                conn, update_authority, listing.token_address, DEFAULT_RISK_THRESHOLDS.liquidity_crash_percent_high
+            )
+            findings += evaluate_creator_history(
+                previous_coin_count, rugged_coin_count=rugged_coin_count
+            )
 
     report = build_report(listing.token_address, listing.symbol, findings, unchecked)
 

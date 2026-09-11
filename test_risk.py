@@ -196,6 +196,25 @@ def test_many_previous_coins_from_creator_is_hoch():
     assert findings[0].severity == Severity.HOCH
 
 
+def test_creator_with_a_rugged_previous_coin_is_kritisch():
+    findings = evaluate_creator_history(1, THRESHOLDS, rugged_coin_count=1)
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.KRITISCH
+
+
+def test_rugged_previous_coin_outranks_the_serial_launcher_count():
+    # selbst bei nur einem einzigen bisherigen Coin ist ein Rug-Nachweis
+    # schwerwiegender als die reine "viele Coins gelistet"-Zaehlung
+    findings = evaluate_creator_history(1, THRESHOLDS, rugged_coin_count=1)
+    assert findings[0].severity == Severity.KRITISCH
+
+
+def test_no_rugged_previous_coins_falls_back_to_count_based_findings():
+    findings = evaluate_creator_history(5, THRESHOLDS, rugged_coin_count=0)
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.HOCH
+
+
 def test_liquidity_trend_without_previous_snapshot_yields_no_findings():
     assert evaluate_liquidity_trend(10_000, None, None, THRESHOLDS) == []
 
